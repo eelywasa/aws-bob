@@ -1,0 +1,30 @@
+{
+  "manifest": {
+    "publishingInformation": {
+      "locales": {
+        "en-GB": {
+          "summary": "Bob - AI voice assistant for families",
+          "examplePhrases": [
+            "Alexa, ask Bob what is the capital of France",
+            "Alexa, ask Bob tell me a short story"
+          ],
+          "name": "Bob",
+          "description": "Ask Bob questions, get explanations, or enjoy short stories. Designed for family use."
+        }
+      },
+      "isAvailableWorldwide": false,
+      "testingInstructions": "Say 'Alexa, open Bob' then ask a question.",
+      "category": "KNOWLEDGE_AND_TRIVIA",
+      "distributionCountries": ["GB"]
+    },
+    "apis": {
+      "custom": {
+        "endpoint": {
+          "uri": "ARN_PLACEHOLDER"
+        },
+        "interfaces": []
+      }
+    },
+    "manifestVersion": "1.0"
+  }
+}

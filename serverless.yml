@@ -1,0 +1,47 @@
+service: alexa-bob
+
+frameworkVersion: '3'
+
+plugins:
+  - serverless-python-requirements
+
+custom:
+  pythonRequirements:
+    dockerizePip: non-linux
+    slim: true
+
+provider:
+  name: aws
+  runtime: python3.11
+  region: eu-west-2
+  stage: ${opt:stage, 'dev'}
+  memorySize: 256
+  timeout: 30  # Alexa allows up to 8s response; Lambda needs headroom
+  environment:
+    OPENAI_MODEL: ${env:OPENAI_MODEL, 'gpt-4o-mini'}
+    MAX_OUTPUT_TOKENS: ${env:MAX_OUTPUT_TOKENS, '280'}
+    OPENAI_REQUEST_TIMEOUT: '10'
+    OPENAI_SECRET_ARN: !Ref OpenAISecret
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - secretsmanager:GetSecretValue
+          Resource: !GetAtt OpenAISecret.Arn
+
+functions:
+  alexa:
+    handler: src.handler.lambda_handler
+    description: Alexa skill backend for Bob
+
+# Secret for OpenAI API key - create manually or via separate stack
+resources:
+  Resources:
+    OpenAISecret:
+      Type: AWS::SecretsManager::Secret
+      Properties:
+        Name: ${self:service}-${self:provider.stage}/openai-api-key
+        Description: OpenAI API key for Alexa skill Bob
+        # Generate placeholder; replace with actual key via Console or CLI
+        SecretString: '{"OPENAI_API_KEY": "replace-me-after-first-deploy"}'

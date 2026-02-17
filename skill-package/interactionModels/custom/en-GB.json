@@ -1,0 +1,73 @@
+{
+  "interactionModel": {
+    "languageModel": {
+      "invocationName": "bob",
+      "intents": [
+        {
+          "name": "AskAIIntent",
+          "slots": [
+            {
+              "name": "utterance",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "ask {utterance}",
+            "tell me {utterance}",
+            "{utterance}",
+            "what is {utterance}",
+            "why does {utterance}",
+            "how do {utterance}"
+          ]
+        },
+        {
+          "name": "ShortenIntent",
+          "slots": [],
+          "samples": [
+            "shorten that",
+            "shorter please",
+            "make it shorter",
+            "give me the short version"
+          ]
+        },
+        {
+          "name": "MoreDetailIntent",
+          "slots": [],
+          "samples": [
+            "tell me more",
+            "more detail",
+            "expand on that",
+            "go into more depth"
+          ]
+        },
+        {
+          "name": "RepeatIntent",
+          "slots": [],
+          "samples": [
+            "repeat that",
+            "say that again",
+            "repeat",
+            "can you say that again"
+          ]
+        },
+        {
+          "name": "AMAZON.HelpIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.StopIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.CancelIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.FallbackIntent",
+          "samples": []
+        }
+      ],
+      "types": []
+    }
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "name": "alexa-bob",
+  "private": true,
+  "devDependencies": {
+    "serverless": "^3.38.0",
+    "serverless-python-requirements": "^6.1.0"
+  }
+}

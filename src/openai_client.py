@@ -22,11 +22,10 @@ _CACHED_API_KEY: str | None = None
 _CACHED_SECRET_ARN: str | None = None
 _API_KEY_LOCK = asyncio.Lock()
 _SM_CLIENT = boto3.client("secretsmanager")
-_CLIENT = httpx.AsyncClient(
-    limits=httpx.Limits(max_keepalive_connections=10, max_connections=20),
-    timeout=DEFAULT_TIMEOUT,
-    headers={"Content-Type": "application/json"},
-)
+
+# Note: httpx.AsyncClient cannot be reused across Lambda invocations because _run_async
+# creates and closes a new event loop per request. Connections would be bound to a
+# closed loop -> RuntimeError: Event loop is closed. We create a client per request.
 
 
 async def _get_api_key_cached(secret_arn: str) -> str:
@@ -115,88 +114,93 @@ async def get_completion(
     }
 
     last_error: Exception | None = None
-    for attempt in range(2):
-        try:
-            r = await _CLIENT.post(
-                RESPONSES_ENDPOINT,
-                headers={
-                    "Authorization": f"Bearer {key}",
-                    "Content-Type": "application/json",
-                },
-                json=payload,
-                timeout=request_timeout,
-            )
+    async with httpx.AsyncClient(
+        limits=httpx.Limits(max_keepalive_connections=10, max_connections=20),
+        timeout=request_timeout,
+        headers={"Content-Type": "application/json"},
+    ) as client:
+        for attempt in range(2):
+            try:
+                r = await client.post(
+                    RESPONSES_ENDPOINT,
+                    headers={
+                        "Authorization": f"Bearer {key}",
+                        "Content-Type": "application/json",
+                    },
+                    json=payload,
+                    timeout=request_timeout,
+                )
 
-            if r.status_code == 200:
-                data = r.json()
-                text = _extract_output_text(data)
-                if not text:
-                    logger.warning(
-                        "OpenAI response had no output_text",
-                        extra={"structured": {"status": 200}},
-                    )
-                    return ""
-                return text
+                if r.status_code == 200:
+                    data = r.json()
+                    text = _extract_output_text(data)
+                    if not text:
+                        logger.warning(
+                            "OpenAI response had no output_text",
+                            extra={"structured": {"status": 200}},
+                        )
+                        return ""
+                    return text
 
-            if r.status_code == 429 or r.status_code >= 500:
-                if attempt == 0:
-                    logger.warning(
-                        "OpenAI retryable error, retrying",
-                        extra={
-                            "structured": {
-                                "status": r.status_code,
-                                "attempt": attempt + 1,
-                            }
-                        },
-                    )
-                    last_error = httpx.HTTPStatusError(
+                if r.status_code == 429 or r.status_code >= 500:
+                    if attempt == 0:
+                        logger.warning(
+                            "OpenAI retryable error, retrying",
+                            extra={
+                                "structured": {
+                                    "status": r.status_code,
+                                    "attempt": attempt + 1,
+                                }
+                            },
+                        )
+                        last_error = httpx.HTTPStatusError(
+                            f"OpenAI {r.status_code}", request=r.request, response=r
+                        )
+                        await asyncio.sleep(0.2)
+                        continue
+                    raise last_error or httpx.HTTPStatusError(
                         f"OpenAI {r.status_code}", request=r.request, response=r
+                    )
+
+                # Non-retryable error
+                try:
+                    err_body = r.json()
+                except Exception:
+                    err_body = r.text
+                logger.error(
+                    "OpenAI API error",
+                    extra={
+                        "structured": {
+                            "status": r.status_code,
+                            "body_preview": str(err_body)[:200],
+                        }
+                    },
+                )
+                raise httpx.HTTPStatusError(
+                    f"OpenAI {r.status_code}: {err_body}",
+                    request=r.request,
+                    response=r,
+                )
+
+            except httpx.TimeoutException as e:
+                logger.error(
+                    "OpenAI request timed out",
+                    extra={"structured": {"timeout": request_timeout}},
+                )
+                raise
+            except httpx.HTTPStatusError:
+                raise
+            except Exception as e:
+                last_error = e
+                if attempt == 0 and isinstance(
+                    e, (httpx.NetworkError, httpx.RemoteProtocolError)
+                ):
+                    logger.warning(
+                        "OpenAI network error, retrying",
+                        extra={"structured": {"attempt": 1}},
                     )
                     await asyncio.sleep(0.2)
                     continue
-                raise last_error or httpx.HTTPStatusError(
-                    f"OpenAI {r.status_code}", request=r.request, response=r
-                )
-
-            # Non-retryable error
-            try:
-                err_body = r.json()
-            except Exception:
-                err_body = r.text
-            logger.error(
-                "OpenAI API error",
-                extra={
-                    "structured": {
-                        "status": r.status_code,
-                        "body_preview": str(err_body)[:200],
-                    }
-                },
-            )
-            raise httpx.HTTPStatusError(
-                f"OpenAI {r.status_code}: {err_body}",
-                request=r.request,
-                response=r,
-            )
-
-        except httpx.TimeoutException as e:
-            logger.error(
-                "OpenAI request timed out",
-                extra={"structured": {"timeout": request_timeout}},
-            )
-            raise
-        except httpx.HTTPStatusError:
-            raise
-        except Exception as e:
-            last_error = e
-            if attempt == 0 and isinstance(
-                e, (httpx.NetworkError, httpx.RemoteProtocolError)
-            ):
-                logger.warning(
-                    "OpenAI network error, retrying",
-                    extra={"structured": {"attempt": 1}},
-                )
-                await asyncio.sleep(0.2)
-                continue
-            raise
+                raise
 
     raise last_error or RuntimeError("Unexpected completion path")

@@ -8,7 +8,6 @@ from typing import Any
 from ask_sdk_core.dispatch_components import AbstractRequestHandler
 from ask_sdk_core.handler_input import HandlerInput
 from ask_sdk_core.skill_builder import SkillBuilder
-from ask_sdk_core.utils import is_intent_name, is_request_type
 from ask_sdk_model import Intent, Response
 from ask_sdk_model.dialog import ElicitSlotDirective
 from ask_sdk_model.slot import Slot
@@ -39,6 +38,12 @@ def _run_async(coro):
         loop.close()
 
 
+def _get_request_type(handler_input: HandlerInput) -> str | None:
+    """Safely get request type (object_type). Never use .type - SDK uses object_type."""
+    req = handler_input.request_envelope.request
+    return getattr(req, "object_type", None)
+
+
 def _elicit_chat_utterance() -> ElicitSlotDirective:
     """Build ElicitSlotDirective for ChatIntent.utterance so next speech is captured without carrier phrase."""
     utterance_slot = Slot(name="utterance", value="", confirmation_status="NONE")
@@ -55,9 +60,9 @@ def _elicit_chat_utterance() -> ElicitSlotDirective:
 
 def _extract_utterance_slot(handler_input: HandlerInput) -> str:
     """Extract 'utterance' slot value from intent (SearchQuery or Literal)."""
-    req = handler_input.request_envelope.request
-    if getattr(req, "object_type", None) != "IntentRequest":
+    if _get_request_type(handler_input) != "IntentRequest":
         return ""
+    req = handler_input.request_envelope.request
     intent = getattr(req, "intent", None)
     if not intent:
         return ""
@@ -178,7 +183,7 @@ class LaunchRequestHandler(AbstractRequestHandler):
     """Handle LaunchRequest - 'Alexa, open brainy bob'."""
 
     def can_handle(self, handler_input: HandlerInput) -> bool:
-        return is_request_type("LaunchRequest")(handler_input)
+        return _get_request_type(handler_input) == "LaunchRequest"
 
     def handle(self, handler_input: HandlerInput) -> Response:
         log_intent(handler_input)
@@ -207,7 +212,7 @@ class AskAIIntentHandler(AbstractRequestHandler):
     def can_handle(self, handler_input: HandlerInput) -> bool:
         req = handler_input.request_envelope.request
         return (
-            getattr(req, "object_type", None) == "IntentRequest"
+            _get_request_type(handler_input) == "IntentRequest"
             and getattr(getattr(req, "intent", None), "name", "") == "AskAIIntent"
         )
 
@@ -221,7 +226,11 @@ class ChatIntentHandler(AbstractRequestHandler):
     """Handle ChatIntent - dialog-elicited utterance (no carrier phrase)."""
 
     def can_handle(self, handler_input: HandlerInput) -> bool:
-        return is_intent_name("ChatIntent")(handler_input)
+        req = handler_input.request_envelope.request
+        return (
+            _get_request_type(handler_input) == "IntentRequest"
+            and getattr(getattr(req, "intent", None), "name", "") == "ChatIntent"
+        )
 
     def handle(self, handler_input: HandlerInput) -> Response:
         log_intent(handler_input)
@@ -300,7 +309,7 @@ class ShortenIntentHandler(AbstractRequestHandler):
     def can_handle(self, handler_input: HandlerInput) -> bool:
         req = handler_input.request_envelope.request
         return (
-            getattr(req, "object_type", None) == "IntentRequest"
+            _get_request_type(handler_input) == "IntentRequest"
             and getattr(getattr(req, "intent", None), "name", "") == "ShortenIntent"
         )
 
@@ -329,7 +338,7 @@ class MoreDetailIntentHandler(AbstractRequestHandler):
     def can_handle(self, handler_input: HandlerInput) -> bool:
         req = handler_input.request_envelope.request
         return (
-            getattr(req, "object_type", None) == "IntentRequest"
+            _get_request_type(handler_input) == "IntentRequest"
             and getattr(getattr(req, "intent", None), "name", "") == "MoreDetailIntent"
         )
 
@@ -357,7 +366,7 @@ class RepeatIntentHandler(AbstractRequestHandler):
     def can_handle(self, handler_input: HandlerInput) -> bool:
         req = handler_input.request_envelope.request
         return (
-            getattr(req, "object_type", None) == "IntentRequest"
+            _get_request_type(handler_input) == "IntentRequest"
             and getattr(getattr(req, "intent", None), "name", "") == "RepeatIntent"
         )
 
@@ -382,7 +391,7 @@ class SessionEndedRequestHandler(AbstractRequestHandler):
     """Handle SessionEndedRequest - session ended, timeout, or user exit."""
 
     def can_handle(self, handler_input: HandlerInput) -> bool:
-        return is_request_type("SessionEndedRequest")(handler_input)
+        return _get_request_type(handler_input) == "SessionEndedRequest"
 
     def handle(self, handler_input: HandlerInput) -> Response:
         log_intent(handler_input)
@@ -397,7 +406,7 @@ class UnhandledRequestHandler(AbstractRequestHandler):
 
     def handle(self, handler_input: HandlerInput) -> Response:
         req = handler_input.request_envelope.request
-        req_type = getattr(req, "object_type", type(req).__name__)
+        req_type = _get_request_type(handler_input) or type(req).__name__
         logger.warning(
             "Unhandled request",
             extra={"structured": {"request_type": req_type}},
@@ -420,7 +429,7 @@ class BuiltInIntentHandler(AbstractRequestHandler):
 
     def can_handle(self, handler_input: HandlerInput) -> bool:
         req = handler_input.request_envelope.request
-        if getattr(req, "object_type", None) != "IntentRequest":
+        if _get_request_type(handler_input) != "IntentRequest":
             return False
         return getattr(getattr(req, "intent", None), "name", "") == self.intent_name
 

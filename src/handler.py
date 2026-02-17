@@ -39,6 +39,20 @@ def _run_async(coro):
         loop.close()
 
 
+def _elicit_chat_utterance() -> ElicitSlotDirective:
+    """Build ElicitSlotDirective for ChatIntent.utterance so next speech is captured without carrier phrase."""
+    utterance_slot = Slot(name="utterance", value="", confirmation_status="NONE")
+    updated_intent = Intent(
+        name="ChatIntent",
+        slots={"utterance": utterance_slot},
+        confirmation_status="NONE",
+    )
+    return ElicitSlotDirective(
+        slot_to_elicit="utterance",
+        updated_intent=updated_intent,
+    )
+
+
 def _extract_utterance_slot(handler_input: HandlerInput) -> str:
     """Extract 'utterance' slot value from intent (SearchQuery or Literal)."""
     req = handler_input.request_envelope.request
@@ -75,6 +89,7 @@ def handle_user_utterance(
             return (
                 handler_input.response_builder.speak(speech)
                 .ask(EMPTY_UTTERANCE_REPROMPT)
+                .add_directive(_elicit_chat_utterance())
                 .set_card(SimpleCard("Brainy Bob", speech))
                 .response
             )
@@ -95,6 +110,7 @@ def handle_user_utterance(
             return (
                 handler_input.response_builder.speak(speech)
                 .ask(EMPTY_UTTERANCE_REPROMPT)
+                .add_directive(_elicit_chat_utterance())
                 .set_card(SimpleCard("Brainy Bob", speech))
                 .response
             )
@@ -150,7 +166,11 @@ def handle_user_utterance(
         .set_card(SimpleCard("Brainy Bob", text))
     )
     if keep_mic_open:
-        response_builder = response_builder.ask(DEFAULT_REPROMPT)
+        response_builder = (
+            response_builder
+            .ask(DEFAULT_REPROMPT)
+            .add_directive(_elicit_chat_utterance())
+        )
     return response_builder.response
 
 
@@ -172,22 +192,10 @@ class LaunchRequestHandler(AbstractRequestHandler):
         greeting = "Hi, I'm Brainy Bob. What should we talk about?"
         reprompt = "Tell me what you'd like to chat about."
 
-        # Elicit utterance slot for ChatIntent via dialog (no carrier phrase needed)
-        utterance_slot = Slot(name="utterance", value="", confirmation_status="NONE")
-        updated_intent = Intent(
-            name="ChatIntent",
-            slots={"utterance": utterance_slot},
-            confirmation_status="NONE",
-        )
-        directive = ElicitSlotDirective(
-            slot_to_elicit="utterance",
-            updated_intent=updated_intent,
-        )
-
         return (
             handler_input.response_builder.speak(greeting)
             .ask(reprompt)
-            .add_directive(directive)
+            .add_directive(_elicit_chat_utterance())
             .set_card(SimpleCard("Brainy Bob", greeting))
             .response
         )
@@ -309,6 +317,7 @@ class ShortenIntentHandler(AbstractRequestHandler):
         return (
             handler_input.response_builder.speak(speech)
             .ask(DEFAULT_REPROMPT)
+            .add_directive(_elicit_chat_utterance())
             .set_card(SimpleCard("Brainy Bob", speech))
             .response
         )
@@ -336,6 +345,7 @@ class MoreDetailIntentHandler(AbstractRequestHandler):
         return (
             handler_input.response_builder.speak(speech)
             .ask(DEFAULT_REPROMPT)
+            .add_directive(_elicit_chat_utterance())
             .set_card(SimpleCard("Brainy Bob", speech))
             .response
         )
@@ -362,6 +372,7 @@ class RepeatIntentHandler(AbstractRequestHandler):
         return (
             handler_input.response_builder.speak(speech)
             .ask(DEFAULT_REPROMPT)
+            .add_directive(_elicit_chat_utterance())
             .set_card(SimpleCard("Brainy Bob", speech))
             .response
         )

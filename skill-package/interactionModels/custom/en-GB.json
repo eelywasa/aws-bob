@@ -4,7 +4,7 @@
       "invocationName": "brainy bob",
       "intents": [
         {
-          "name": "FreeTalkIntent",
+          "name": "ChatIntent",
           "slots": [
             {
               "name": "utterance",
@@ -12,31 +12,23 @@
             }
           ],
           "samples": [
-            "tell me about {utterance}",
-            "what about {utterance}",
-            "talk about {utterance}",
-            "I want to know about {utterance}",
-            "let's discuss {utterance}",
-            "explain {utterance}",
-            "why is {utterance}",
-            "how does {utterance}",
-            "tell me {utterance}"
-          ]
-        },
-        {
-          "name": "AskAIIntent",
-          "slots": [
-            {
-              "name": "utterance",
-              "type": "AMAZON.SearchQuery"
-            }
-          ],
-          "samples": [
-            "ask {utterance}",
+            "about {utterance}",
+            "say {utterance}",
             "tell me {utterance}",
             "help me with {utterance}",
-            "can you {utterance}",
-            "I want to know {utterance}"
+            "talk about {utterance}",
+            "what is {utterance}",
+            "what are {utterance}",
+            "why is {utterance}",
+            "why does {utterance}",
+            "how does {utterance}",
+            "how do {utterance}",
+            "how old {utterance}",
+            "how old are {utterance}",
+            "how old is {utterance}",
+            "who is {utterance}",
+            "when did {utterance}",
+            "explain {utterance}"
           ]
         },
         {
@@ -45,7 +37,6 @@
             "make that shorter",
             "shorten that",
             "summarise that",
-            "give me a shorter version",
             "in brief",
             "in short"
           ]
@@ -56,9 +47,8 @@
             "tell me more",
             "go deeper",
             "expand on that",
-            "give me more detail",
-            "explain further",
-            "can you elaborate"
+            "more detail",
+            "explain further"
           ]
         },
         {
@@ -66,28 +56,45 @@
           "samples": [
             "repeat that",
             "say that again",
-            "repeat please",
-            "what did you say"
+            "repeat please"
           ]
         },
-        {
-          "name": "AMAZON.HelpIntent",
-          "samples": []
-        },
-        {
-          "name": "AMAZON.StopIntent",
-          "samples": []
-        },
-        {
-          "name": "AMAZON.CancelIntent",
-          "samples": []
-        },
-        {
-          "name": "AMAZON.FallbackIntent",
-          "samples": []
-        }
+        { "name": "AMAZON.HelpIntent", "samples": [] },
+        { "name": "AMAZON.StopIntent", "samples": [] },
+        { "name": "AMAZON.CancelIntent", "samples": [] },
+        { "name": "AMAZON.FallbackIntent", "samples": [] }
       ],
       "types": []
-    }
+    },
+    "dialog": {
+      "intents": [
+        {
+          "name": "ChatIntent",
+          "confirmationRequired": false,
+          "prompts": {},
+          "slots": [
+            {
+              "name": "utterance",
+              "type": "AMAZON.SearchQuery",
+              "confirmationRequired": false,
+              "elicitationRequired": true,
+              "prompts": {
+                "elicitation": "Elicit.Slot.ChatIntent.utterance"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "prompts": [
+      {
+        "id": "Elicit.Slot.ChatIntent.utterance",
+        "variations": [
+          { "type": "PlainText", "value": "What should we talk about?" },
+          { "type": "PlainText", "value": "Ask me anything, Sophie." },
+          { "type": "PlainText", "value": "Go on. What’s your question?" }
+        ]
+      }
+    ]
   }
 }

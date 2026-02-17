@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 from typing import Any
 
+import boto3
 import httpx
+
 from .util import get_env, logger
 
 OPENAI_BASE = "https://api.openai.com/v1"
@@ -14,21 +17,43 @@ RESPONSES_ENDPOINT = f"{OPENAI_BASE}/responses"
 DEFAULT_TIMEOUT = 10
 DEFAULT_MAX_TOKENS = 280
 
+# Module-level shared resources (cold start only)
+_CACHED_API_KEY: str | None = None
+_CACHED_SECRET_ARN: str | None = None
+_API_KEY_LOCK = asyncio.Lock()
+_SM_CLIENT = boto3.client("secretsmanager")
+_CLIENT = httpx.AsyncClient(
+    limits=httpx.Limits(max_keepalive_connections=10, max_connections=20),
+    timeout=DEFAULT_TIMEOUT,
+    headers={"Content-Type": "application/json"},
+)
 
-def _get_api_key(secret_arn: str) -> str:
-    """Fetch OpenAI API key from AWS Secrets Manager."""
-    import boto3
 
-    client = boto3.client("secretsmanager")
-    resp = client.get_secret_value(SecretId=secret_arn)
-    secret = resp.get("SecretString")
-    if not secret:
-        raise ValueError("Secret has no SecretString")
-    data = json.loads(secret)
-    key = data.get("OPENAI_API_KEY")
-    if not key or key == "replace-me-after-first-deploy":
-        raise ValueError("OPENAI_API_KEY not configured in Secrets Manager")
-    return key
+async def _get_api_key_cached(secret_arn: str) -> str:
+    """Fetch OpenAI API key from AWS Secrets Manager, cached per Lambda container."""
+    global _CACHED_API_KEY, _CACHED_SECRET_ARN
+
+    if _CACHED_API_KEY is not None and _CACHED_SECRET_ARN == secret_arn:
+        return _CACHED_API_KEY
+
+    async with _API_KEY_LOCK:
+        if _CACHED_API_KEY is not None and _CACHED_SECRET_ARN == secret_arn:
+            return _CACHED_API_KEY
+
+        resp = await asyncio.to_thread(
+            _SM_CLIENT.get_secret_value, SecretId=secret_arn
+        )
+        secret = resp.get("SecretString")
+        if not secret:
+            raise ValueError("Secret has no SecretString")
+        data = json.loads(secret)
+        key = data.get("OPENAI_API_KEY")
+        if not key or key == "replace-me-after-first-deploy":
+            raise ValueError("OPENAI_API_KEY not configured in Secrets Manager")
+
+        _CACHED_API_KEY = key
+        _CACHED_SECRET_ARN = secret_arn
+        return key
 
 
 def _extract_output_text(response_data: dict[str, Any]) -> str:
@@ -66,12 +91,12 @@ async def get_completion(
 ) -> str:
     """
     Call OpenAI Responses API and return extracted output text.
-    Retries once on 429 or 5xx.
+    Retries once on 429 or 5xx with 200ms backoff.
     """
     key = api_key
     if not key:
         arn = secret_arn or get_env("OPENAI_SECRET_ARN")
-        key = _get_api_key(arn)
+        key = await _get_api_key_cached(arn)
 
     model_name = model or get_env("OPENAI_MODEL")
     max_tokens = max_output_tokens or int(
@@ -92,15 +117,15 @@ async def get_completion(
     last_error: Exception | None = None
     for attempt in range(2):
         try:
-            async with httpx.AsyncClient(timeout=request_timeout) as client:
-                r = await client.post(
-                    RESPONSES_ENDPOINT,
-                    headers={
-                        "Authorization": f"Bearer {key}",
-                        "Content-Type": "application/json",
-                    },
-                    json=payload,
-                )
+            r = await _CLIENT.post(
+                RESPONSES_ENDPOINT,
+                headers={
+                    "Authorization": f"Bearer {key}",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+                timeout=request_timeout,
+            )
 
             if r.status_code == 200:
                 data = r.json()
@@ -127,6 +152,7 @@ async def get_completion(
                     last_error = httpx.HTTPStatusError(
                         f"OpenAI {r.status_code}", request=r.request, response=r
                     )
+                    await asyncio.sleep(0.2)
                     continue
                 raise last_error or httpx.HTTPStatusError(
                     f"OpenAI {r.status_code}", request=r.request, response=r
@@ -162,8 +188,14 @@ async def get_completion(
             raise
         except Exception as e:
             last_error = e
-            if attempt == 0 and isinstance(e, (httpx.NetworkError, httpx.RemoteProtocolError)):
-                logger.warning("OpenAI network error, retrying", extra={"structured": {"attempt": 1}})
+            if attempt == 0 and isinstance(
+                e, (httpx.NetworkError, httpx.RemoteProtocolError)
+            ):
+                logger.warning(
+                    "OpenAI network error, retrying",
+                    extra={"structured": {"attempt": 1}},
+                )
+                await asyncio.sleep(0.2)
                 continue
             raise
 

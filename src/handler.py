@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 from typing import Any
 
 from ask_sdk_core.dispatch_components import AbstractRequestHandler
@@ -27,15 +26,6 @@ FALLBACK_MSG = (
 MAX_TURNS = 4
 DEFAULT_REPROMPT = "What else would you like to know?"
 EMPTY_UTTERANCE_REPROMPT = "Tell me what you'd like to chat about."
-
-
-def _run_async(coro):
-    """Run async code from sync handler (Lambda is sync by default)."""
-    loop = asyncio.new_event_loop()
-    try:
-        return loop.run_until_complete(coro)
-    finally:
-        loop.close()
 
 
 def _get_request_type(handler_input: HandlerInput) -> str | None:
@@ -141,12 +131,10 @@ def handle_user_utterance(
     instructions = build_system_prompt(audience)
 
     try:
-        text = _run_async(
-            get_completion(
-                instructions=instructions,
-                user_input=input_items,
-                store=False,
-            )
+        text = get_completion(
+            instructions=instructions,
+            user_input=input_items,
+            store=False,
         )
     except Exception as e:
         logger.exception(
@@ -256,12 +244,10 @@ def _handle_shorten(handler_input: HandlerInput) -> str:
         "No markdown, no lists."
     )
     try:
-        speech = _run_async(
-            get_completion(
-                instructions=instructions,
-                user_input=f"Summarise briefly: {last_answer}",
-                store=False,
-            )
+        speech = get_completion(
+            instructions=instructions,
+            user_input=f"Summarise briefly: {last_answer}",
+            store=False,
         )
     except Exception as e:
         logger.exception("Shorten failed", extra={"structured": {"error": type(e).__name__}})
@@ -290,12 +276,10 @@ def _handle_more_detail(handler_input: HandlerInput) -> str:
         {"role": "user", "content": "Could you tell me more about that?"},
     ]
     try:
-        speech = _run_async(
-            get_completion(
-                instructions=instructions,
-                user_input=input_items,
-                store=False,
-            )
+        speech = get_completion(
+            instructions=instructions,
+            user_input=input_items,
+            store=False,
         )
     except Exception as e:
         logger.exception("MoreDetail failed", extra={"structured": {"error": type(e).__name__}})

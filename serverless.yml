@@ -7,13 +7,13 @@ plugins:
 
 custom:
   pythonRequirements:
-    dockerizePip: non-linux
+    dockerizePip: false  # Set true if you have Docker (needed for packages with C extensions)
     slim: true
 
 provider:
   name: aws
   runtime: python3.11
-  region: eu-west-2
+  region: eu-west-1
   stage: ${opt:stage, 'dev'}
   memorySize: 256
   timeout: 30  # Alexa allows up to 8s response; Lambda needs headroom
@@ -28,7 +28,7 @@ provider:
         - Effect: Allow
           Action:
             - secretsmanager:GetSecretValue
-          Resource: !GetAtt OpenAISecret.Arn
+          Resource: !Ref OpenAISecret
 
 functions:
   alexa:
@@ -38,6 +38,15 @@ functions:
 # Secret for OpenAI API key - create manually or via separate stack
 resources:
   Resources:
+    AlexaInvokePermission:
+      Type: AWS::Lambda::Permission
+      Properties:
+        FunctionName:
+          Ref: AlexaLambdaFunction
+        Action: lambda:InvokeFunction
+        Principal: alexa-appkit.amazon.com
+        EventSourceToken: amzn1.ask.skill.69625f69-8ba9-45e2-9fc2-99dbb71bef3e
+
     OpenAISecret:
       Type: AWS::SecretsManager::Secret
       Properties:

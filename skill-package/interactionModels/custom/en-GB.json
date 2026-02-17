@@ -1,8 +1,28 @@
 {
   "interactionModel": {
     "languageModel": {
-      "invocationName": "bob",
+      "invocationName": "brainy bob",
       "intents": [
+        {
+          "name": "FreeTalkIntent",
+          "slots": [
+            {
+              "name": "utterance",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "tell me about {utterance}",
+            "what about {utterance}",
+            "talk about {utterance}",
+            "I want to know about {utterance}",
+            "let's discuss {utterance}",
+            "explain {utterance}",
+            "why is {utterance}",
+            "how does {utterance}",
+            "tell me {utterance}"
+          ]
+        },
         {
           "name": "AskAIIntent",
           "slots": [
@@ -14,40 +34,40 @@
           "samples": [
             "ask {utterance}",
             "tell me {utterance}",
-            "{utterance}",
-            "what is {utterance}",
-            "why does {utterance}",
-            "how do {utterance}"
+            "help me with {utterance}",
+            "can you {utterance}",
+            "I want to know {utterance}"
           ]
         },
         {
           "name": "ShortenIntent",
-          "slots": [],
           "samples": [
+            "make that shorter",
             "shorten that",
-            "shorter please",
-            "make it shorter",
-            "give me the short version"
+            "summarise that",
+            "give me a shorter version",
+            "in brief",
+            "in short"
           ]
         },
         {
           "name": "MoreDetailIntent",
-          "slots": [],
           "samples": [
             "tell me more",
-            "more detail",
+            "go deeper",
             "expand on that",
-            "go into more depth"
+            "give me more detail",
+            "explain further",
+            "can you elaborate"
           ]
         },
         {
           "name": "RepeatIntent",
-          "slots": [],
           "samples": [
             "repeat that",
             "say that again",
-            "repeat",
-            "can you say that again"
+            "repeat please",
+            "what did you say"
           ]
         },
         {

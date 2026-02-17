@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from util import logger
+from .util import logger
 
 
 def check_input(utterance: str) -> tuple[bool, str | None]:

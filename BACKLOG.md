@@ -27,7 +27,7 @@ Acceptance Criteria:
 
 ---
 
-## 1.2 Latency Instrumentation
+## 1.2 Latency Instrumentation ✅ DONE
 User Story:
 As a developer, I want to understand where time is spent in the request pipeline.
 

@@ -14,12 +14,14 @@ from ask_sdk_model.ui import SimpleCard
 
 import os
 import random
+import time
 
 from . import memory
 from .openai_client import get_completion
 from .phrases import get_chat_phrases, get_question_phrases
 from .prompts import VALID_MODES, _MODE_DISPLAY, build_system_prompt
 from .safety import check_input, sanitize_output
+from .telemetry import consume_cold_start, emit_emf
 from .util import log_intent, logger
 
 # Graceful fallback when AI fails
@@ -159,18 +161,25 @@ def handle_user_utterance(
             .response
         )
 
+    # Telemetry — cold-start detection and total request timer
+    is_cold = consume_cold_start()
+    _t_total = time.perf_counter()
+
     # Build history from session (ensure list exists)
     history: list[dict[str, Any]] = session_attrs.get("history", [])
     if not isinstance(history, list):
         history = []
 
     # Load cross-session memory and persisted mode once per session
+    _ddb_load_ms: float | None = None
     if "cross_session_turns" not in session_attrs:
         user_id = handler_input.request_envelope.context.system.user.user_id
+        _t_ddb_load = time.perf_counter()
         try:
             turns, persisted_mode = memory.load_user_data(user_id)
         except Exception:
             turns, persisted_mode = [], "general"
+        _ddb_load_ms = (time.perf_counter() - _t_ddb_load) * 1000
         session_attrs["cross_session_turns"] = turns
         session_attrs["mode"] = persisted_mode  # DDB preference wins over launch default
     cross_session_turns: list[dict] = session_attrs.get("cross_session_turns", [])
@@ -196,6 +205,7 @@ def handle_user_utterance(
                 _send_progressive_response(handler_input, phrase)
 
     ai_succeeded = False
+    _t_openai = time.perf_counter()
     try:
         text = get_completion(
             instructions=instructions,
@@ -210,7 +220,9 @@ def handle_user_utterance(
             extra={"structured": {"error_type": type(e).__name__}},
         )
         text = FALLBACK_MSG
+    _openai_ms = (time.perf_counter() - _t_openai) * 1000
 
+    _ddb_save_ms: float | None = None
     if not text:
         text = FALLBACK_MSG
     else:
@@ -223,7 +235,20 @@ def handle_user_utterance(
         session_attrs["last_answer"] = text
         if ai_succeeded:
             user_id = handler_input.request_envelope.context.system.user.user_id
+            _t_ddb_save = time.perf_counter()
             memory.save_turns(user_id, cross_session_turns + history, mode=session_attrs.get("mode", "general"))
+            _ddb_save_ms = (time.perf_counter() - _t_ddb_save) * 1000
+
+    req = handler_input.request_envelope.request
+    intent_name = getattr(getattr(req, "intent", None), "name", None) or "Unknown"
+    emit_emf(
+        intent=intent_name,
+        is_cold=is_cold,
+        total_ms=(time.perf_counter() - _t_total) * 1000,
+        openai_ms=_openai_ms,
+        ddb_load_ms=_ddb_load_ms,
+        ddb_save_ms=_ddb_save_ms,
+    )
 
     response_builder = (
         handler_input.response_builder.speak(text)

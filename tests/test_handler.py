@@ -815,6 +815,108 @@ class TestProgressiveResponse:
         assert "look that up" in speech.lower()
 
 
+# ---------------------------------------------------------------------------
+# Latency instrumentation
+# ---------------------------------------------------------------------------
+
+class TestLatencyInstrumentation:
+    @pytest.fixture(autouse=True)
+    def reset_cold_start(self):
+        import src.telemetry as tel
+        tel._IS_COLD_START = True
+        yield
+        tel._IS_COLD_START = True
+
+    def test_emit_emf_called_on_chat_intent_success(self):
+        event = _intent_event("ChatIntent", slots={"utterance": "what is gravity"})
+        with patch("src.handler.get_completion", return_value="Gravity pulls things."), \
+             patch("src.memory.load_user_data", return_value=([], "general")), \
+             patch("src.memory.save_turns"), \
+             patch("src.handler.emit_emf") as mock_emf:
+            lambda_handler(event, {})
+        mock_emf.assert_called_once()
+
+    def test_emit_emf_called_on_ask_ai_intent_success(self):
+        event = _intent_event("AskAIIntent", slots={"utterance": "what is the speed of light"})
+        with patch("src.handler.get_completion", return_value="Light travels fast."), \
+             patch("src.memory.load_user_data", return_value=([], "general")), \
+             patch("src.memory.save_turns"), \
+             patch("src.handler.emit_emf") as mock_emf:
+            lambda_handler(event, {})
+        mock_emf.assert_called_once()
+
+    def test_emit_emf_not_called_on_empty_utterance(self):
+        event = _intent_event("ChatIntent", slots={"utterance": ""})
+        with patch("src.handler.emit_emf") as mock_emf:
+            lambda_handler(event, {})
+        mock_emf.assert_not_called()
+
+    def test_emit_emf_called_even_on_openai_failure(self):
+        event = _intent_event("ChatIntent", slots={"utterance": "what is gravity"})
+        with patch("src.handler.get_completion", side_effect=RuntimeError("API down")), \
+             patch("src.memory.load_user_data", return_value=([], "general")), \
+             patch("src.handler.emit_emf") as mock_emf:
+            lambda_handler(event, {})
+        mock_emf.assert_called_once()
+
+    def test_emit_emf_cold_start_true_on_first_invocation(self):
+        event = _intent_event("ChatIntent", slots={"utterance": "what is gravity"})
+        with patch("src.handler.get_completion", return_value="Gravity pulls things."), \
+             patch("src.memory.load_user_data", return_value=([], "general")), \
+             patch("src.memory.save_turns"), \
+             patch("src.handler.emit_emf") as mock_emf:
+            lambda_handler(event, {})
+        assert mock_emf.call_args.kwargs["is_cold"] is True
+
+    def test_emit_emf_cold_start_false_on_second_invocation(self):
+        event = _intent_event("ChatIntent", slots={"utterance": "what is gravity"})
+        with patch("src.handler.get_completion", return_value="Gravity pulls things."), \
+             patch("src.memory.load_user_data", return_value=([], "general")), \
+             patch("src.memory.save_turns"), \
+             patch("src.handler.emit_emf") as mock_emf:
+            lambda_handler(event, {})
+            lambda_handler(event, {})
+        assert mock_emf.call_args_list[1].kwargs["is_cold"] is False
+
+    def test_emit_emf_ddb_load_ms_none_when_session_already_warm(self):
+        event = _intent_event(
+            "ChatIntent",
+            slots={"utterance": "what is gravity"},
+            session_attrs={"cross_session_turns": [], "history": [], "mode": "general"},
+        )
+        with patch("src.handler.get_completion", return_value="Gravity pulls things."), \
+             patch("src.memory.save_turns"), \
+             patch("src.handler.emit_emf") as mock_emf:
+            lambda_handler(event, {})
+        assert mock_emf.call_args.kwargs["ddb_load_ms"] is None
+
+    def test_emit_emf_ddb_save_ms_none_when_openai_fails(self):
+        event = _intent_event("ChatIntent", slots={"utterance": "what is gravity"})
+        with patch("src.handler.get_completion", side_effect=RuntimeError("API down")), \
+             patch("src.memory.load_user_data", return_value=([], "general")), \
+             patch("src.handler.emit_emf") as mock_emf:
+            lambda_handler(event, {})
+        assert mock_emf.call_args.kwargs["ddb_save_ms"] is None
+
+    def test_emit_emf_receives_correct_intent_name(self):
+        event = _intent_event("AskAIIntent", slots={"utterance": "what is water"})
+        with patch("src.handler.get_completion", return_value="Water is H2O."), \
+             patch("src.memory.load_user_data", return_value=([], "general")), \
+             patch("src.memory.save_turns"), \
+             patch("src.handler.emit_emf") as mock_emf:
+            lambda_handler(event, {})
+        assert mock_emf.call_args.kwargs["intent"] == "AskAIIntent"
+
+    def test_emit_emf_total_ms_is_positive(self):
+        event = _intent_event("ChatIntent", slots={"utterance": "what is gravity"})
+        with patch("src.handler.get_completion", return_value="Gravity pulls things."), \
+             patch("src.memory.load_user_data", return_value=([], "general")), \
+             patch("src.memory.save_turns"), \
+             patch("src.handler.emit_emf") as mock_emf:
+            lambda_handler(event, {})
+        assert mock_emf.call_args.kwargs["total_ms"] > 0
+
+
 class TestUnhandledRequest:
     def test_unknown_intent_returns_fallback_speech(self):
         event = _intent_event("UnknownCustomIntent")

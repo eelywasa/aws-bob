@@ -516,13 +516,17 @@ class TestWebSearch:
         _, speech_arg = mock_prog.call_args[0]
         assert "look that up" in speech_arg.lower()
 
-    def test_progressive_response_not_sent_when_search_disabled(self, monkeypatch):
+    def test_progressive_response_sent_for_long_utterance_no_search(self, monkeypatch):
         monkeypatch.setenv("ENABLE_WEB_SEARCH", "false")
-        event = _intent_event("ChatIntent", slots={"utterance": "what is water"})
-        with patch("src.handler.get_completion", return_value="Water is H2O."), \
+        event = _intent_event("ChatIntent", slots={"utterance": "what is the speed of light in a vacuum"})
+        with patch("src.handler.get_completion", return_value="Light travels fast."), \
+             patch("src.handler.get_question_phrases", return_value=("Q phrase.",)), \
              patch("src.handler._send_progressive_response") as mock_prog:
             lambda_handler(event, {})
-        mock_prog.assert_not_called()
+        mock_prog.assert_called_once()
+        _, speech_arg = mock_prog.call_args[0]
+        assert "look that up" not in speech_arg.lower()
+        assert speech_arg == "Q phrase."
 
     def test_search_failure_returns_fallback(self, monkeypatch):
         monkeypatch.setenv("ENABLE_WEB_SEARCH", "true")
@@ -732,6 +736,83 @@ class TestPersistentMode:
             lambda_handler(event, {})
         mock_save.assert_called_once()
         assert mock_save.call_args[1].get("mode") == "educational"
+
+
+# ---------------------------------------------------------------------------
+# Progressive response behaviour
+# ---------------------------------------------------------------------------
+
+class TestProgressiveResponse:
+    def test_not_sent_for_short_utterance(self, monkeypatch):
+        monkeypatch.setenv("ENABLE_WEB_SEARCH", "false")
+        monkeypatch.setenv("PROGRESSIVE_MIN_WORDS", "8")
+        event = _intent_event("ChatIntent", slots={"utterance": "what is water"})  # 3 words
+        with patch("src.handler.get_completion", return_value="Water is H2O."), \
+             patch("src.handler._send_progressive_response") as mock_prog:
+            lambda_handler(event, {})
+        mock_prog.assert_not_called()
+
+    def test_sent_for_long_question(self, monkeypatch):
+        monkeypatch.setenv("ENABLE_WEB_SEARCH", "false")
+        monkeypatch.setenv("PROGRESSIVE_MIN_WORDS", "8")
+        event = _intent_event("ChatIntent", slots={"utterance": "what is the boiling point of water at altitude"})
+        with patch("src.handler.get_completion", return_value="It varies."), \
+             patch("src.handler.get_question_phrases", return_value=("Q phrase.",)), \
+             patch("src.handler._send_progressive_response") as mock_prog:
+            lambda_handler(event, {})
+        mock_prog.assert_called_once()
+        _, speech = mock_prog.call_args[0]
+        assert speech == "Q phrase."
+
+    def test_sent_for_long_conversational_utterance(self, monkeypatch):
+        monkeypatch.setenv("ENABLE_WEB_SEARCH", "false")
+        monkeypatch.setenv("PROGRESSIVE_MIN_WORDS", "8")
+        event = _intent_event("ChatIntent", slots={"utterance": "I am really bored and just want to talk"})
+        with patch("src.handler.get_completion", return_value="I'm here to chat."), \
+             patch("src.handler.get_chat_phrases", return_value=("Chat phrase.",)), \
+             patch("src.handler._send_progressive_response") as mock_prog:
+            lambda_handler(event, {})
+        mock_prog.assert_called_once()
+        _, speech = mock_prog.call_args[0]
+        assert speech == "Chat phrase."
+
+    def test_disabled_flag_prevents_fire(self, monkeypatch):
+        monkeypatch.setenv("ENABLE_PROGRESSIVE_RESPONSE", "false")
+        monkeypatch.setenv("ENABLE_WEB_SEARCH", "false")
+        event = _intent_event("ChatIntent", slots={"utterance": "what is the speed of light in a vacuum"})
+        with patch("src.handler.get_completion", return_value="Light travels fast."), \
+             patch("src.handler._send_progressive_response") as mock_prog:
+            lambda_handler(event, {})
+        mock_prog.assert_not_called()
+
+    def test_disabled_flag_also_suppresses_web_search_phrase(self, monkeypatch):
+        monkeypatch.setenv("ENABLE_PROGRESSIVE_RESPONSE", "false")
+        monkeypatch.setenv("ENABLE_WEB_SEARCH", "true")
+        event = _intent_event("ChatIntent", slots={"utterance": "latest news today"})
+        with patch("src.handler.get_completion", return_value="Here is the news."), \
+             patch("src.handler._send_progressive_response") as mock_prog:
+            lambda_handler(event, {})
+        mock_prog.assert_not_called()
+
+    def test_custom_min_words_respected(self, monkeypatch):
+        monkeypatch.setenv("ENABLE_WEB_SEARCH", "false")
+        monkeypatch.setenv("PROGRESSIVE_MIN_WORDS", "3")
+        event = _intent_event("ChatIntent", slots={"utterance": "what is water"})  # 3 words, now at threshold
+        with patch("src.handler.get_completion", return_value="Water is H2O."), \
+             patch("src.handler.get_question_phrases", return_value=("Q phrase.",)), \
+             patch("src.handler._send_progressive_response") as mock_prog:
+            lambda_handler(event, {})
+        mock_prog.assert_called_once()
+
+    def test_web_search_phrase_used_regardless_of_utterance_length(self, monkeypatch):
+        monkeypatch.setenv("ENABLE_WEB_SEARCH", "true")
+        event = _intent_event("ChatIntent", slots={"utterance": "news"})  # 1 word, below any min
+        with patch("src.handler.get_completion", return_value="Here is the news."), \
+             patch("src.handler._send_progressive_response") as mock_prog:
+            lambda_handler(event, {})
+        mock_prog.assert_called_once()
+        _, speech = mock_prog.call_args[0]
+        assert "look that up" in speech.lower()
 
 
 class TestUnhandledRequest:

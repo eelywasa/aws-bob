@@ -26,6 +26,10 @@ provider:
     OPENAI_SEARCH_TIMEOUT: ${env:OPENAI_SEARCH_TIMEOUT, '7'}
     ENABLE_MEMORY: ${env:ENABLE_MEMORY, 'true'}
     MEMORY_TABLE: !Ref MemoryTable
+    ENABLE_PROGRESSIVE_RESPONSE: ${env:ENABLE_PROGRESSIVE_RESPONSE, 'true'}
+    PROGRESSIVE_MIN_WORDS: ${env:PROGRESSIVE_MIN_WORDS, '8'}
+    PROGRESSIVE_QUESTION_PHRASES_PARAM: !Ref ProgressiveQuestionPhrasesParam
+    PROGRESSIVE_CHAT_PHRASES_PARAM: !Ref ProgressiveChatPhrasesParam
   iam:
     role:
       statements:
@@ -39,6 +43,12 @@ provider:
             - dynamodb:PutItem
             - dynamodb:UpdateItem
           Resource: !GetAtt MemoryTable.Arn
+        - Effect: Allow
+          Action:
+            - ssm:GetParameter
+          Resource:
+            - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter${ProgressiveQuestionPhrasesParam}"
+            - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter${ProgressiveChatPhrasesParam}"
 
 functions:
   alexa:
@@ -73,6 +83,22 @@ resources:
         KeySchema:
           - AttributeName: user_id
             KeyType: HASH
+
+    ProgressiveQuestionPhrasesParam:
+      Type: AWS::SSM::Parameter
+      Properties:
+        Name: /${self:service}/${self:provider.stage}/progressive-question-phrases
+        Type: String
+        Value: '["Let me think about that.", "Good question, let me think.", "Let me find out.", "One moment."]'
+        Description: Progressive response phrases for question-type utterances
+
+    ProgressiveChatPhrasesParam:
+      Type: AWS::SSM::Parameter
+      Properties:
+        Name: /${self:service}/${self:provider.stage}/progressive-chat-phrases
+        Type: String
+        Value: '["Let me think about that.", "Hmm, let me think."]'
+        Description: Progressive response phrases for conversational utterances
 
     OpenAISecret:
       Type: AWS::SecretsManager::Secret

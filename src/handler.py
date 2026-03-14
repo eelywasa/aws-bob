@@ -13,9 +13,11 @@ from ask_sdk_model.slot import Slot
 from ask_sdk_model.ui import SimpleCard
 
 import os
+import random
 
 from . import memory
 from .openai_client import get_completion
+from .phrases import get_chat_phrases, get_question_phrases
 from .prompts import VALID_MODES, _MODE_DISPLAY, build_system_prompt
 from .safety import check_input, sanitize_output
 from .util import log_intent, logger
@@ -29,6 +31,22 @@ FALLBACK_MSG = (
 MAX_TURNS = 4
 DEFAULT_REPROMPT = "What else would you like to know?"
 EMPTY_UTTERANCE_REPROMPT = "Tell me what you'd like to chat about."
+
+_QUESTION_WORDS = frozenset((
+    "what", "why", "how", "when", "where", "who", "which",
+    "is", "are", "can", "does", "do", "will",
+))
+
+
+def _get_progressive_phrase(text: str) -> str | None:
+    """Return a progressive phrase for the utterance, or None if too short to warrant one."""
+    min_words = int(os.environ.get("PROGRESSIVE_MIN_WORDS", "8"))
+    words = text.lower().split()
+    if len(words) < min_words:
+        return None
+    if words[0] in _QUESTION_WORDS or text.rstrip().endswith("?"):
+        return random.choice(get_question_phrases())
+    return random.choice(get_chat_phrases())
 
 
 def _send_progressive_response(handler_input: HandlerInput, speech: str) -> None:
@@ -167,9 +185,15 @@ def handle_user_utterance(
 
     instructions = build_system_prompt(mode)
     use_web_search = os.environ.get("ENABLE_WEB_SEARCH", "false").lower() == "true"
+    progressive_enabled = os.environ.get("ENABLE_PROGRESSIVE_RESPONSE", "true").lower() == "true"
 
-    if use_web_search:
-        _send_progressive_response(handler_input, "Let me look that up for you.")
+    if progressive_enabled:
+        if use_web_search:
+            _send_progressive_response(handler_input, "Let me look that up for you.")
+        else:
+            phrase = _get_progressive_phrase(user_text)
+            if phrase:
+                _send_progressive_response(handler_input, phrase)
 
     ai_succeeded = False
     try:

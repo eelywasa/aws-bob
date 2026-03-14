@@ -178,6 +178,10 @@ ask smapi get-skill-status -s <skill-id>
 | `OPENAI_SEARCH_TIMEOUT` | `7` | Timeout (seconds) for web search requests |
 | `ENABLE_MEMORY` | `true` | Enable DynamoDB cross-session memory |
 | `MEMORY_TABLE` | _(set by CloudFormation)_ | DynamoDB table name |
+| `ENABLE_PROGRESSIVE_RESPONSE` | `true` | Enable spoken acknowledgement before AI call |
+| `PROGRESSIVE_MIN_WORDS` | `8` | Minimum utterance word count to trigger progressive response |
+| `PROGRESSIVE_QUESTION_PHRASES_PARAM` | _(set by CloudFormation)_ | SSM parameter name for question phrases |
+| `PROGRESSIVE_CHAT_PHRASES_PARAM` | _(set by CloudFormation)_ | SSM parameter name for chat phrases |
 
 ---
 
@@ -211,6 +215,40 @@ ENABLE_WEB_SEARCH=true npx serverless deploy
 
 ```bash
 ENABLE_MEMORY=false npx serverless deploy
+```
+
+### Update progressive response phrases (no redeploy needed)
+
+Phrases are stored in SSM Parameter Store and loaded on Lambda cold start. Update them at any time with:
+
+```bash
+# Question-type utterances (what/why/how/when/where/who…)
+aws ssm put-parameter \
+  --name /alexa-bob/dev/progressive-question-phrases \
+  --value '["Let me think about that.", "Good question, let me think.", "One moment."]' \
+  --type String --overwrite --region eu-west-1
+
+# Conversational utterances
+aws ssm put-parameter \
+  --name /alexa-bob/dev/progressive-chat-phrases \
+  --value '["Let me think about that.", "Hmm, let me think."]' \
+  --type String --overwrite --region eu-west-1
+```
+
+Changes take effect on the next Lambda cold start. The value must be a JSON array of non-empty strings.
+
+### Disable progressive responses
+
+```bash
+ENABLE_PROGRESSIVE_RESPONSE=false npx serverless deploy
+```
+
+### Tune the short-utterance cutoff
+
+The progressive response is suppressed for utterances below `PROGRESSIVE_MIN_WORDS` words (default: 8). Adjust without a full redeploy by updating the env var in `serverless.yml` and redeploying, or override at deploy time:
+
+```bash
+PROGRESSIVE_MIN_WORDS=5 npx serverless deploy
 ```
 
 ---

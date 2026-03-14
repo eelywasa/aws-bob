@@ -108,10 +108,12 @@ def get_completion(
     max_output_tokens: int | None = None,
     timeout: float | None = None,
     store: bool = False,
+    use_web_search: bool = False,
 ) -> str:
     """
     Call OpenAI Responses API and return extracted output text.
     Retries once on 429 or 5xx with 100ms backoff.
+    Pass use_web_search=True to enable the web_search_preview tool.
     """
     key = api_key
     if not key:
@@ -124,9 +126,14 @@ def get_completion(
     max_tokens = max_output_tokens or int(
         os.environ.get("MAX_OUTPUT_TOKENS", str(DEFAULT_MAX_TOKENS))
     )
-    request_timeout = timeout or float(
-        os.environ.get("OPENAI_REQUEST_TIMEOUT", str(DEFAULT_TIMEOUT))
-    )
+    if use_web_search:
+        request_timeout = timeout or float(
+            os.environ.get("OPENAI_SEARCH_TIMEOUT", "7.0")
+        )
+    else:
+        request_timeout = timeout or float(
+            os.environ.get("OPENAI_REQUEST_TIMEOUT", str(DEFAULT_TIMEOUT))
+        )
 
     payload: dict[str, Any] = {
         "model": model_name,
@@ -135,6 +142,8 @@ def get_completion(
         "max_output_tokens": max_tokens,
         "store": store,
     }
+    if use_web_search:
+        payload["tools"] = [{"type": "web_search_preview"}]
 
     last_error: Exception | None = None
     for attempt in range(2):

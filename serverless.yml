@@ -22,6 +22,10 @@ provider:
     MAX_OUTPUT_TOKENS: ${env:MAX_OUTPUT_TOKENS, '280'}
     OPENAI_REQUEST_TIMEOUT: '10'
     OPENAI_SECRET_ARN: !Ref OpenAISecret
+    ENABLE_WEB_SEARCH: ${env:ENABLE_WEB_SEARCH, 'false'}
+    OPENAI_SEARCH_TIMEOUT: ${env:OPENAI_SEARCH_TIMEOUT, '7'}
+    ENABLE_MEMORY: ${env:ENABLE_MEMORY, 'true'}
+    MEMORY_TABLE: !Ref MemoryTable
   iam:
     role:
       statements:
@@ -29,6 +33,11 @@ provider:
           Action:
             - secretsmanager:GetSecretValue
           Resource: !Ref OpenAISecret
+        - Effect: Allow
+          Action:
+            - dynamodb:GetItem
+            - dynamodb:PutItem
+          Resource: !GetAtt MemoryTable.Arn
 
 functions:
   alexa:
@@ -46,6 +55,23 @@ resources:
         Action: lambda:InvokeFunction
         Principal: alexa-appkit.amazon.com
         EventSourceToken: amzn1.ask.skill.69625f69-8ba9-45e2-9fc2-99dbb71bef3e
+
+    MemoryTable:
+      Type: AWS::DynamoDB::Table
+      DeletionPolicy: Retain
+      Properties:
+        TableName: ${self:service}-${self:provider.stage}-memory
+        BillingMode: PAY_PER_REQUEST
+        TableClass: STANDARD_INFREQUENT_ACCESS
+        TimeToLiveSpecification:
+          AttributeName: ttl_epoch
+          Enabled: true
+        AttributeDefinitions:
+          - AttributeName: user_id
+            AttributeType: S
+        KeySchema:
+          - AttributeName: user_id
+            KeyType: HASH
 
     OpenAISecret:
       Type: AWS::SecretsManager::Secret

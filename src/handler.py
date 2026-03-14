@@ -12,6 +12,9 @@ from ask_sdk_model.dialog import ElicitSlotDirective
 from ask_sdk_model.slot import Slot
 from ask_sdk_model.ui import SimpleCard
 
+import os
+
+from . import memory
 from .openai_client import get_completion
 from .prompts import build_system_prompt
 from .safety import check_input, sanitize_output
@@ -26,6 +29,29 @@ FALLBACK_MSG = (
 MAX_TURNS = 4
 DEFAULT_REPROMPT = "What else would you like to know?"
 EMPTY_UTTERANCE_REPROMPT = "Tell me what you'd like to chat about."
+
+
+def _send_progressive_response(handler_input: HandlerInput, speech: str) -> None:
+    """Send a VoicePlayer.Speak directive so the device speaks while Lambda is still running."""
+    from ask_sdk_model.services.directive import (
+        Header,
+        SendDirectiveRequest,
+        SpeakDirective,
+    )
+    try:
+        request_id = handler_input.request_envelope.request.request_id
+        directive_client = (
+            handler_input.service_client_factory.get_directive_service()
+        )
+        directive_client.enqueue(
+            SendDirectiveRequest(
+                header=Header(request_id=request_id),
+                directive=SpeakDirective(speech=speech),
+            )
+        )
+    except Exception:
+        # In tests or when API credentials are absent, silently skip.
+        logger.debug("Progressive response skipped (no service client)")
 
 
 def _get_request_type(handler_input: HandlerInput) -> str | None:
@@ -121,21 +147,37 @@ def handle_user_utterance(
         history = []
     audience = session_attrs.get("audience", "general")
 
-    # Build input for OpenAI
-    input_items: list[dict[str, Any]] = []
+    # Load cross-session memory once per session
+    if "cross_session_turns" not in session_attrs:
+        user_id = handler_input.request_envelope.context.system.user.user_id
+        try:
+            session_attrs["cross_session_turns"] = memory.load_turns(user_id)
+        except Exception:
+            session_attrs["cross_session_turns"] = []
+    cross_session_turns: list[dict] = session_attrs.get("cross_session_turns", [])
+
+    # Build input for OpenAI — prepend past turns then current session turns
+    input_items: list[dict[str, Any]] = memory.build_cross_session_input(cross_session_turns)
     for turn in history:
         input_items.append({"role": "user", "content": turn.get("user", "")})
         input_items.append({"role": "assistant", "content": turn.get("assistant", "")})
     input_items.append({"role": "user", "content": user_text})
 
     instructions = build_system_prompt(audience)
+    use_web_search = os.environ.get("ENABLE_WEB_SEARCH", "false").lower() == "true"
 
+    if use_web_search:
+        _send_progressive_response(handler_input, "Let me look that up for you.")
+
+    ai_succeeded = False
     try:
         text = get_completion(
             instructions=instructions,
             user_input=input_items,
             store=False,
+            use_web_search=use_web_search,
         )
+        ai_succeeded = True
     except Exception as e:
         logger.exception(
             "OpenAI request failed",
@@ -153,6 +195,9 @@ def handle_user_utterance(
             history = history[-MAX_TURNS:]
         session_attrs["history"] = history
         session_attrs["last_answer"] = text
+        if ai_succeeded:
+            user_id = handler_input.request_envelope.context.system.user.user_id
+            memory.save_turns(user_id, cross_session_turns + history)
 
     response_builder = (
         handler_input.response_builder.speak(text)
@@ -407,9 +452,10 @@ class UnhandledRequestHandler(AbstractRequestHandler):
 class BuiltInIntentHandler(AbstractRequestHandler):
     """Handle AMAZON built-in intents (Help, Stop, Cancel, Fallback)."""
 
-    def __init__(self, intent_name: str, speech: str):
+    def __init__(self, intent_name: str, speech: str, end_session: bool = False):
         self.intent_name = intent_name
         self.speech = speech
+        self.end_session = end_session
 
     def can_handle(self, handler_input: HandlerInput) -> bool:
         req = handler_input.request_envelope.request
@@ -419,11 +465,13 @@ class BuiltInIntentHandler(AbstractRequestHandler):
 
     def handle(self, handler_input: HandlerInput) -> Response:
         log_intent(handler_input)
-        return (
+        rb = (
             handler_input.response_builder.speak(self.speech)
             .set_card(SimpleCard("Brainy Bob", self.speech))
-            .response
         )
+        if self.end_session:
+            rb = rb.set_should_end_session(True)
+        return rb.response
 
 
 def _register_handlers(sb: SkillBuilder) -> SkillBuilder:
@@ -442,10 +490,10 @@ def _register_handlers(sb: SkillBuilder) -> SkillBuilder:
         )
     )
     sb.add_request_handler(
-        BuiltInIntentHandler("AMAZON.StopIntent", "Goodbye.")
+        BuiltInIntentHandler("AMAZON.StopIntent", "Goodbye.", end_session=True)
     )
     sb.add_request_handler(
-        BuiltInIntentHandler("AMAZON.CancelIntent", "Cancelled.")
+        BuiltInIntentHandler("AMAZON.CancelIntent", "Cancelled.", end_session=True)
     )
     sb.add_request_handler(
         BuiltInIntentHandler(

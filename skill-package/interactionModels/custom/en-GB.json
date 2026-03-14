@@ -13,22 +13,7 @@
           ],
           "samples": [
             "about {utterance}",
-            "say {utterance}",
-            "tell me {utterance}",
-            "help me with {utterance}",
-            "talk about {utterance}",
-            "what is {utterance}",
-            "what are {utterance}",
-            "why is {utterance}",
-            "why does {utterance}",
-            "how does {utterance}",
-            "how do {utterance}",
-            "how old {utterance}",
-            "how old are {utterance}",
-            "how old is {utterance}",
-            "who is {utterance}",
-            "when did {utterance}",
-            "explain {utterance}"
+            "say {utterance}"
           ]
         },
         {
@@ -36,27 +21,22 @@
           "samples": [
             "make that shorter",
             "shorten that",
-            "summarise that",
-            "in brief",
-            "in short"
+            "summarise that"
           ]
         },
         {
           "name": "MoreDetailIntent",
           "samples": [
             "tell me more",
-            "go deeper",
-            "expand on that",
             "more detail",
-            "explain further"
+            "go deeper"
           ]
         },
         {
           "name": "RepeatIntent",
           "samples": [
             "repeat that",
-            "say that again",
-            "repeat please"
+            "say that again"
           ]
         },
         { "name": "AMAZON.HelpIntent", "samples": [] },
@@ -90,9 +70,7 @@
       {
         "id": "Elicit.Slot.ChatIntent.utterance",
         "variations": [
-          { "type": "PlainText", "value": "What should we talk about?" },
-          { "type": "PlainText", "value": "Ask me anything, Sophie." },
-          { "type": "PlainText", "value": "Go on. What’s your question?" }
+          { "type": "PlainText", "value": "What should we talk about?" }
         ]
       }
     ]

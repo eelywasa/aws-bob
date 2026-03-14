@@ -10,7 +10,7 @@ Phases are ordered by **user impact first**, then **capability expansion**, then
 # Phase 1 — Performance, Responsiveness, and Reliability
 Goal: Make Brainy Bob feel fast and dependable in everyday use.
 
-## 1.1 Progressive Responses
+## 1.1 Progressive Responses ✅ DONE
 User Story:
 As a user, when I ask a question, Alexa should immediately respond with a short acknowledgement so it does not feel like the system is frozen.
 

@@ -44,7 +44,7 @@ Acceptance Criteria:
 
 ---
 
-## 1.3 Lambda Cold Start Optimisation
+## 1.3 Lambda Cold Start Optimisation ✅ DONE (partial — memory increased to 1024MB)
 User Story:
 As a user, the first question after inactivity should still feel reasonably fast.
 

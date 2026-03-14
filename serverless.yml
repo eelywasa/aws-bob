@@ -15,7 +15,7 @@ provider:
   runtime: python3.11
   region: eu-west-1
   stage: ${opt:stage, 'dev'}
-  memorySize: 256
+  memorySize: 1024
   timeout: 30  # Alexa allows up to 8s response; Lambda needs headroom
   environment:
     OPENAI_MODEL: ${env:OPENAI_MODEL, 'gpt-4o-mini'}

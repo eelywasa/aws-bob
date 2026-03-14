@@ -17,6 +17,23 @@
           ]
         },
         {
+          "name": "SetModeIntent",
+          "slots": [
+            {
+              "name": "mode",
+              "type": "ModeType"
+            }
+          ],
+          "samples": [
+            "switch to {mode} mode",
+            "use {mode} mode",
+            "change to {mode} mode",
+            "set mode to {mode}",
+            "{mode} mode please",
+            "turn on {mode} mode"
+          ]
+        },
+        {
           "name": "ShortenIntent",
           "samples": [
             "make that shorter",
@@ -44,7 +61,34 @@
         { "name": "AMAZON.CancelIntent", "samples": [] },
         { "name": "AMAZON.FallbackIntent", "samples": [] }
       ],
-      "types": []
+      "types": [
+        {
+          "name": "ModeType",
+          "values": [
+            {
+              "id": "general",
+              "name": {
+                "value": "general",
+                "synonyms": ["normal", "standard", "default", "regular"]
+              }
+            },
+            {
+              "id": "child",
+              "name": {
+                "value": "child",
+                "synonyms": ["kids", "children", "kid", "simple", "easy"]
+              }
+            },
+            {
+              "id": "educational",
+              "name": {
+                "value": "educational",
+                "synonyms": ["learning", "school", "detailed", "advanced", "deep"]
+              }
+            }
+          ]
+        }
+      ]
     },
     "dialog": {
       "intents": [

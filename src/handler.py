@@ -16,7 +16,7 @@ import os
 
 from . import memory
 from .openai_client import get_completion
-from .prompts import build_system_prompt
+from .prompts import VALID_MODES, _MODE_DISPLAY, build_system_prompt
 from .safety import check_input, sanitize_output
 from .util import log_intent, logger
 
@@ -145,16 +145,18 @@ def handle_user_utterance(
     history: list[dict[str, Any]] = session_attrs.get("history", [])
     if not isinstance(history, list):
         history = []
-    audience = session_attrs.get("audience", "general")
 
-    # Load cross-session memory once per session
+    # Load cross-session memory and persisted mode once per session
     if "cross_session_turns" not in session_attrs:
         user_id = handler_input.request_envelope.context.system.user.user_id
         try:
-            session_attrs["cross_session_turns"] = memory.load_turns(user_id)
+            turns, persisted_mode = memory.load_user_data(user_id)
         except Exception:
-            session_attrs["cross_session_turns"] = []
+            turns, persisted_mode = [], "general"
+        session_attrs["cross_session_turns"] = turns
+        session_attrs["mode"] = persisted_mode  # DDB preference wins over launch default
     cross_session_turns: list[dict] = session_attrs.get("cross_session_turns", [])
+    mode = session_attrs.get("mode", "general")
 
     # Build input for OpenAI — prepend past turns then current session turns
     input_items: list[dict[str, Any]] = memory.build_cross_session_input(cross_session_turns)
@@ -163,7 +165,7 @@ def handle_user_utterance(
         input_items.append({"role": "assistant", "content": turn.get("assistant", "")})
     input_items.append({"role": "user", "content": user_text})
 
-    instructions = build_system_prompt(audience)
+    instructions = build_system_prompt(mode)
     use_web_search = os.environ.get("ENABLE_WEB_SEARCH", "false").lower() == "true"
 
     if use_web_search:
@@ -197,7 +199,7 @@ def handle_user_utterance(
         session_attrs["last_answer"] = text
         if ai_succeeded:
             user_id = handler_input.request_envelope.context.system.user.user_id
-            memory.save_turns(user_id, cross_session_turns + history)
+            memory.save_turns(user_id, cross_session_turns + history, mode=session_attrs.get("mode", "general"))
 
     response_builder = (
         handler_input.response_builder.speak(text)
@@ -224,8 +226,8 @@ class LaunchRequestHandler(AbstractRequestHandler):
         # Ensure session attributes exist
         if "history" not in session_attrs:
             session_attrs["history"] = []
-        if "audience" not in session_attrs:
-            session_attrs["audience"] = "general"
+        if "mode" not in session_attrs:
+            session_attrs["mode"] = "general"
 
         greeting = "Hi, I'm Brainy Bob. What should we talk about?"
         reprompt = "Tell me what you'd like to chat about."
@@ -310,7 +312,7 @@ def _handle_more_detail(handler_input: HandlerInput) -> str:
     if not last_user or not last_assistant:
         return "Ask me something first, then say tell me more."
 
-    instructions = build_system_prompt(session_attrs.get("audience", "general"))
+    instructions = build_system_prompt(session_attrs.get("mode", "general"))
     instructions += (
         "\n\nThe user wants more detail on your previous answer. "
         "Expand helpfully in 3-5 sentences. Voice-friendly, no markdown."
@@ -449,6 +451,59 @@ class UnhandledRequestHandler(AbstractRequestHandler):
         )
 
 
+class SetModeIntentHandler(AbstractRequestHandler):
+    """Handle SetModeIntent — user switches conversational mode by voice."""
+
+    def can_handle(self, handler_input: HandlerInput) -> bool:
+        req = handler_input.request_envelope.request
+        return (
+            _get_request_type(handler_input) == "IntentRequest"
+            and getattr(getattr(req, "intent", None), "name", "") == "SetModeIntent"
+        )
+
+    def handle(self, handler_input: HandlerInput) -> Response:
+        log_intent(handler_input)
+        req = handler_input.request_envelope.request
+        intent = getattr(req, "intent", None)
+        slots = getattr(intent, "slots", {}) or {}
+        mode_slot = slots.get("mode")
+        raw_value = (getattr(mode_slot, "value", None) or "").strip().lower()
+
+        session_attrs = handler_input.attributes_manager.session_attributes
+
+        if raw_value not in VALID_MODES:
+            speech = (
+                "I can switch to general, kids, or educational mode. "
+                "Which would you like?"
+            )
+            return (
+                handler_input.response_builder.speak(speech)
+                .ask(speech)
+                .add_directive(_elicit_chat_utterance())
+                .set_card(SimpleCard("Brainy Bob", speech))
+                .response
+            )
+
+        current_mode = session_attrs.get("mode", "general")
+        display = _MODE_DISPLAY.get(raw_value, raw_value)
+
+        if raw_value == current_mode:
+            speech = f"I'm already in {display} mode. What would you like to know?"
+        else:
+            session_attrs["mode"] = raw_value
+            user_id = handler_input.request_envelope.context.system.user.user_id
+            memory.save_mode(user_id, raw_value)
+            speech = f"Switching to {display} mode. What would you like to know?"
+
+        return (
+            handler_input.response_builder.speak(speech)
+            .ask(DEFAULT_REPROMPT)
+            .add_directive(_elicit_chat_utterance())
+            .set_card(SimpleCard("Brainy Bob", speech))
+            .response
+        )
+
+
 class BuiltInIntentHandler(AbstractRequestHandler):
     """Handle AMAZON built-in intents (Help, Stop, Cancel, Fallback)."""
 
@@ -482,11 +537,12 @@ def _register_handlers(sb: SkillBuilder) -> SkillBuilder:
     sb.add_request_handler(ShortenIntentHandler())
     sb.add_request_handler(MoreDetailIntentHandler())
     sb.add_request_handler(RepeatIntentHandler())
+    sb.add_request_handler(SetModeIntentHandler())
     sb.add_request_handler(
         BuiltInIntentHandler(
             "AMAZON.HelpIntent",
-            "You can ask me anything. Try: dinosaurs, tell me a story, "
-            "or why is the sky blue. What would you like to know?",
+            "You can ask me anything, or say switch to kids mode or educational mode. "
+            "What would you like to know?",
         )
     )
     sb.add_request_handler(

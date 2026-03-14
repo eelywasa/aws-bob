@@ -144,7 +144,7 @@ class TestLaunchRequest:
         response = lambda_handler(_launch_event(), {})
         attrs = response["sessionAttributes"]
         assert attrs.get("history") == []
-        assert attrs.get("audience") == "general"
+        assert attrs.get("mode") == "general"
 
 
 # ---------------------------------------------------------------------------
@@ -205,7 +205,7 @@ class TestChatIntent:
         event = _intent_event(
             "ChatIntent",
             slots={"utterance": "tell me more"},
-            session_attrs={"history": prior_history, "audience": "general"},
+            session_attrs={"history": prior_history, "mode": "general"},
         )
         captured = {}
         def capture_call(**kwargs):
@@ -227,7 +227,7 @@ class TestChatIntent:
         event = _intent_event(
             "ChatIntent",
             slots={"utterance": "new question"},
-            session_attrs={"history": prior_history, "audience": "general"},
+            session_attrs={"history": prior_history, "mode": "general"},
         )
         with patch("src.handler.get_completion", return_value="New answer."):
             response = lambda_handler(event, {})
@@ -332,7 +332,7 @@ class TestShortenIntent:
         session = {
             "history": [{"user": "what is gravity", "assistant": "Gravity is a fundamental force of nature that attracts objects with mass toward one another."}],
             "last_answer": "Gravity is a fundamental force of nature that attracts objects with mass toward one another.",
-            "audience": "general",
+            "mode": "general",
         }
         event = _intent_event("ShortenIntent", session_attrs=session)
         with patch("src.handler.get_completion", return_value="Gravity pulls things together.") as mock_ai:
@@ -341,7 +341,7 @@ class TestShortenIntent:
         assert "Gravity pulls things together." in _ssml_text(response)
 
     def test_no_history_returns_prompt(self):
-        event = _intent_event("ShortenIntent", session_attrs={"history": [], "audience": "general"})
+        event = _intent_event("ShortenIntent", session_attrs={"history": [], "mode": "general"})
         with patch("src.handler.get_completion") as mock_ai:
             response = lambda_handler(event, {})
         mock_ai.assert_not_called()
@@ -351,7 +351,7 @@ class TestShortenIntent:
         session = {
             "history": [{"user": "q", "assistant": "Long answer here."}],
             "last_answer": "Long answer here.",
-            "audience": "general",
+            "mode": "general",
         }
         event = _intent_event("ShortenIntent", session_attrs=session)
         with patch("src.handler.get_completion", return_value="Short answer."):
@@ -362,7 +362,7 @@ class TestShortenIntent:
         session = {
             "history": [{"user": "q", "assistant": "Long answer."}],
             "last_answer": "Long answer.",
-            "audience": "general",
+            "mode": "general",
         }
         event = _intent_event("ShortenIntent", session_attrs=session)
         with patch("src.handler.get_completion", return_value="Short."):
@@ -380,7 +380,7 @@ class TestMoreDetailIntent:
         session = {
             "history": [{"user": "what is gravity", "assistant": "Gravity pulls things."}],
             "last_answer": "Gravity pulls things.",
-            "audience": "general",
+            "mode": "general",
         }
         event = _intent_event("MoreDetailIntent", session_attrs=session)
         with patch("src.handler.get_completion", return_value="More detail about gravity.") as mock_ai:
@@ -389,7 +389,7 @@ class TestMoreDetailIntent:
         assert "More detail about gravity." in _ssml_text(response)
 
     def test_no_history_returns_prompt(self):
-        event = _intent_event("MoreDetailIntent", session_attrs={"history": [], "audience": "general"})
+        event = _intent_event("MoreDetailIntent", session_attrs={"history": [], "mode": "general"})
         with patch("src.handler.get_completion") as mock_ai:
             response = lambda_handler(event, {})
         mock_ai.assert_not_called()
@@ -398,7 +398,7 @@ class TestMoreDetailIntent:
     def test_includes_prior_qa_in_prompt(self):
         session = {
             "history": [{"user": "what is water", "assistant": "Water is H2O."}],
-            "audience": "general",
+            "mode": "general",
         }
         event = _intent_event("MoreDetailIntent", session_attrs=session)
         captured = {}
@@ -412,7 +412,7 @@ class TestMoreDetailIntent:
     def test_keeps_mic_open(self):
         session = {
             "history": [{"user": "q", "assistant": "A."}],
-            "audience": "general",
+            "mode": "general",
         }
         event = _intent_event("MoreDetailIntent", session_attrs=session)
         with patch("src.handler.get_completion", return_value="More detail."):
@@ -430,7 +430,7 @@ class TestRepeatIntent:
         session = {
             "history": [{"user": "what is gravity", "assistant": "Gravity pulls things."}],
             "last_answer": "Gravity pulls things.",
-            "audience": "general",
+            "mode": "general",
         }
         event = _intent_event("RepeatIntent", session_attrs=session)
         with patch("src.handler.get_completion") as mock_ai:
@@ -441,7 +441,7 @@ class TestRepeatIntent:
     def test_falls_back_to_history_if_no_last_answer(self):
         session = {
             "history": [{"user": "q", "assistant": "Answer from history."}],
-            "audience": "general",
+            "mode": "general",
         }
         event = _intent_event("RepeatIntent", session_attrs=session)
         with patch("src.handler.get_completion") as mock_ai:
@@ -450,12 +450,12 @@ class TestRepeatIntent:
         assert "Answer from history." in _ssml_text(response)
 
     def test_no_history_returns_prompt(self):
-        event = _intent_event("RepeatIntent", session_attrs={"history": [], "audience": "general"})
+        event = _intent_event("RepeatIntent", session_attrs={"history": [], "mode": "general"})
         response = lambda_handler(event, {})
         assert "ask me something" in _ssml_text(response).lower()
 
     def test_keeps_mic_open(self):
-        session = {"history": [{"user": "q", "assistant": "A."}], "last_answer": "A.", "audience": "general"}
+        session = {"history": [{"user": "q", "assistant": "A."}], "last_answer": "A.", "mode": "general"}
         event = _intent_event("RepeatIntent", session_attrs=session)
         response = lambda_handler(event, {})
         assert not _should_end(response)
@@ -543,9 +543,9 @@ class TestWebSearch:
 # ---------------------------------------------------------------------------
 
 class TestCrossSessionMemory:
-    def test_load_turns_called_with_user_id(self):
+    def test_load_user_data_called_with_user_id(self):
         event = _intent_event("ChatIntent", slots={"utterance": "what is gravity"})
-        with patch("src.memory.load_turns", return_value=[]) as mock_load, \
+        with patch("src.memory.load_user_data", return_value=([], "general")) as mock_load, \
              patch("src.handler.get_completion", return_value="Gravity pulls things."), \
              patch("src.memory.save_turns"):
             lambda_handler(event, {})
@@ -558,7 +558,7 @@ class TestCrossSessionMemory:
         def capture(**kwargs):
             captured["user_input"] = kwargs.get("user_input")
             return "More details."
-        with patch("src.memory.load_turns", return_value=past_turns), \
+        with patch("src.memory.load_user_data", return_value=(past_turns, "general")), \
              patch("src.handler.get_completion", side_effect=capture), \
              patch("src.memory.save_turns"):
             lambda_handler(event, {})
@@ -573,9 +573,9 @@ class TestCrossSessionMemory:
         event = _intent_event(
             "ChatIntent",
             slots={"utterance": "what is gravity"},
-            session_attrs={"cross_session_turns": [], "history": [], "audience": "general"},
+            session_attrs={"cross_session_turns": [], "history": [], "mode": "general"},
         )
-        with patch("src.memory.load_turns") as mock_load, \
+        with patch("src.memory.load_user_data") as mock_load, \
              patch("src.handler.get_completion", return_value="Gravity pulls things."), \
              patch("src.memory.save_turns"):
             lambda_handler(event, {})
@@ -584,7 +584,7 @@ class TestCrossSessionMemory:
     def test_save_turns_called_with_merged_history(self):
         past_turns = [{"user": "what is water", "assistant": "Water is H2O."}]
         event = _intent_event("ChatIntent", slots={"utterance": "what is gravity"})
-        with patch("src.memory.load_turns", return_value=past_turns), \
+        with patch("src.memory.load_user_data", return_value=(past_turns, "general")), \
              patch("src.handler.get_completion", return_value="Gravity pulls things."), \
              patch("src.memory.save_turns") as mock_save:
             lambda_handler(event, {})
@@ -596,7 +596,7 @@ class TestCrossSessionMemory:
 
     def test_save_not_called_on_openai_failure(self):
         event = _intent_event("ChatIntent", slots={"utterance": "what is gravity"})
-        with patch("src.memory.load_turns", return_value=[]), \
+        with patch("src.memory.load_user_data", return_value=([], "general")), \
              patch("src.handler.get_completion", side_effect=RuntimeError("API down")), \
              patch("src.memory.save_turns") as mock_save:
             lambda_handler(event, {})
@@ -604,7 +604,7 @@ class TestCrossSessionMemory:
 
     def test_memory_load_failure_does_not_crash(self):
         event = _intent_event("ChatIntent", slots={"utterance": "what is gravity"})
-        with patch("src.memory.load_turns", side_effect=RuntimeError("DDB down")), \
+        with patch("src.memory.load_user_data", side_effect=RuntimeError("DDB down")), \
              patch("src.handler.get_completion", return_value="Gravity pulls things."), \
              patch("src.memory.save_turns"):
             response = lambda_handler(event, {})
@@ -614,12 +614,124 @@ class TestCrossSessionMemory:
     def test_memory_disabled_produces_normal_response(self, monkeypatch):
         monkeypatch.setenv("ENABLE_MEMORY", "false")
         event = _intent_event("ChatIntent", slots={"utterance": "what is gravity"})
-        with patch("src.memory.load_turns", return_value=[]) as mock_load, \
+        with patch("src.memory.load_user_data", return_value=([], "general")) as mock_load, \
              patch("src.handler.get_completion", return_value="Gravity pulls things.") as mock_ai, \
              patch("src.memory.save_turns"):
             response = lambda_handler(event, {})
         mock_ai.assert_called_once()
         assert "Gravity pulls things." in _ssml_text(response)
+
+
+# ---------------------------------------------------------------------------
+# SetModeIntent
+# ---------------------------------------------------------------------------
+
+class TestSetModeIntent:
+    def test_switches_mode_and_updates_session(self):
+        event = _intent_event("SetModeIntent", slots={"mode": "child"},
+                              session_attrs={"history": [], "mode": "general"})
+        with patch("src.memory.save_mode") as mock_save:
+            response = lambda_handler(event, {})
+        speech = _ssml_text(response)
+        assert "kids" in speech.lower() or "child" in speech.lower()
+        assert response["sessionAttributes"].get("mode") == "child"
+        mock_save.assert_called_once_with("amzn1.ask.account.test", "child")
+
+    def test_already_in_requested_mode(self):
+        event = _intent_event("SetModeIntent", slots={"mode": "general"},
+                              session_attrs={"history": [], "mode": "general"})
+        with patch("src.memory.save_mode") as mock_save:
+            response = lambda_handler(event, {})
+        speech = _ssml_text(response)
+        assert "already" in speech.lower()
+        mock_save.assert_not_called()
+
+    def test_unknown_mode_value_prompts_choice(self):
+        event = _intent_event("SetModeIntent", slots={"mode": "turbo"},
+                              session_attrs={"history": [], "mode": "general"})
+        with patch("src.memory.save_mode") as mock_save:
+            response = lambda_handler(event, {})
+        speech = _ssml_text(response)
+        assert "general" in speech.lower() or "kids" in speech.lower()
+        mock_save.assert_not_called()
+
+    def test_keeps_mic_open(self):
+        event = _intent_event("SetModeIntent", slots={"mode": "educational"},
+                              session_attrs={"history": [], "mode": "general"})
+        with patch("src.memory.save_mode"):
+            response = lambda_handler(event, {})
+        assert not _should_end(response)
+        assert _has_reprompt(response)
+        assert _has_elicit_directive(response)
+
+    def test_educational_mode_switch(self):
+        event = _intent_event("SetModeIntent", slots={"mode": "educational"},
+                              session_attrs={"history": [], "mode": "general"})
+        with patch("src.memory.save_mode"):
+            response = lambda_handler(event, {})
+        assert response["sessionAttributes"].get("mode") == "educational"
+        assert "educational" in _ssml_text(response).lower()
+
+    def test_mode_persists_to_next_utterance(self):
+        """After SetModeIntent sets child mode, next ChatIntent uses child prompt."""
+        # First: set mode to child (session now has mode=child, cross_session_turns present)
+        set_event = _intent_event("SetModeIntent", slots={"mode": "child"},
+                                  session_attrs={"history": [], "mode": "general",
+                                                 "cross_session_turns": []})
+        with patch("src.memory.save_mode"):
+            set_response = lambda_handler(set_event, {})
+
+        # Second: chat utterance using session attrs from previous response
+        session_after_set = set_response["sessionAttributes"]
+        chat_event = _intent_event("ChatIntent", slots={"utterance": "what is water"},
+                                   session_attrs=session_after_set)
+        captured = {}
+        def capture(**kwargs):
+            captured["instructions"] = kwargs.get("instructions", "")
+            return "Water is H2O."
+        with patch("src.handler.get_completion", side_effect=capture), \
+             patch("src.memory.save_turns"):
+            lambda_handler(chat_event, {})
+        assert "child" in captured["instructions"].lower()
+
+
+# ---------------------------------------------------------------------------
+# Persistent mode loaded from DynamoDB
+# ---------------------------------------------------------------------------
+
+class TestPersistentMode:
+    def test_persisted_mode_loaded_at_first_utterance(self):
+        """load_user_data returning educational mode results in educational prompt."""
+        event = _intent_event("ChatIntent", slots={"utterance": "what is DNA"})
+        captured = {}
+        def capture(**kwargs):
+            captured["instructions"] = kwargs.get("instructions", "")
+            return "DNA is the blueprint of life."
+        with patch("src.memory.load_user_data", return_value=([], "educational")), \
+             patch("src.handler.get_completion", side_effect=capture), \
+             patch("src.memory.save_turns"):
+            lambda_handler(event, {})
+        assert "educational" in captured["instructions"].lower()
+
+    def test_persisted_mode_stored_in_session(self):
+        """Session attributes reflect the mode loaded from DynamoDB."""
+        event = _intent_event("ChatIntent", slots={"utterance": "what is DNA"})
+        with patch("src.memory.load_user_data", return_value=([], "child")), \
+             patch("src.handler.get_completion", return_value="DNA is genetic code."), \
+             patch("src.memory.save_turns"):
+            response = lambda_handler(event, {})
+        assert response["sessionAttributes"].get("mode") == "child"
+
+    def test_mode_included_in_save_turns_call(self):
+        """save_turns is called with the current session mode."""
+        event = _intent_event("ChatIntent", slots={"utterance": "what is water"},
+                              session_attrs={"cross_session_turns": [], "history": [],
+                                            "mode": "educational"})
+        with patch("src.handler.get_completion", return_value="Water is H2O."), \
+             patch("src.memory.save_turns") as mock_save:
+            lambda_handler(event, {})
+        mock_save.assert_called_once()
+        assert mock_save.call_args[1].get("mode") == "educational"
 
 
 class TestUnhandledRequest:

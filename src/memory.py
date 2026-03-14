@@ -1,4 +1,4 @@
-"""Cross-session memory: DynamoDB-backed turn persistence for Brainy Bob."""
+"""Cross-session memory: DynamoDB-backed turn and mode persistence for Brainy Bob."""
 
 from __future__ import annotations
 
@@ -27,10 +27,14 @@ def _table_name() -> str | None:
     return os.environ.get("MEMORY_TABLE") or None
 
 
-def load_turns(user_id: str) -> list[dict]:
-    """Load last MEMORY_INJECT_TURNS turns for user from DynamoDB. Returns [] on any failure."""
+def load_user_data(user_id: str) -> tuple[list[dict], str]:
+    """
+    Single GetItem → (turns, mode). Returns ([], 'general') on any failure.
+    Turns are capped to last MEMORY_INJECT_TURNS. Mode defaults to 'general'
+    if absent or unrecognised.
+    """
     if not _is_enabled() or not _table_name():
-        return []
+        return [], "general"
     try:
         result = _DDB_CLIENT.get_item(
             TableName=_table_name(),
@@ -38,7 +42,8 @@ def load_turns(user_id: str) -> list[dict]:
         )
         item = result.get("Item")
         if not item:
-            return []
+            return [], "general"
+
         raw_turns = item.get("turns", {}).get("L", [])
         turns: list[dict] = []
         for entry in raw_turns:
@@ -47,14 +52,19 @@ def load_turns(user_id: str) -> list[dict]:
                 "user": m.get("user", {}).get("S", ""),
                 "assistant": m.get("assistant", {}).get("S", ""),
             })
-        return turns[-MEMORY_INJECT_TURNS:]
+
+        from .prompts import VALID_MODES
+        raw_mode = item.get("mode", {}).get("S", "general")
+        mode = raw_mode if raw_mode in VALID_MODES else "general"
+
+        return turns[-MEMORY_INJECT_TURNS:], mode
     except Exception as exc:
-        logger.warning("memory.load_turns failed", extra={"structured": {"error": type(exc).__name__}})
-        return []
+        logger.warning("memory.load_user_data failed", extra={"structured": {"error": type(exc).__name__}})
+        return [], "general"
 
 
-def save_turns(user_id: str, turns: list[dict]) -> None:
-    """Persist turns list to DynamoDB, capped at MEMORY_MAX_TURNS. Silent on failure."""
+def save_turns(user_id: str, turns: list[dict], mode: str = "general") -> None:
+    """Persist turns and mode together (PutItem), capped at MEMORY_MAX_TURNS. Silent on failure."""
     if not _is_enabled() or not _table_name():
         return
     try:
@@ -70,12 +80,35 @@ def save_turns(user_id: str, turns: list[dict]) -> None:
             Item={
                 "user_id": {"S": user_id},
                 "turns": {"L": ddb_turns},
+                "mode": {"S": mode},
                 "updated_at": {"S": now.isoformat()},
                 "ttl_epoch": {"N": str(ttl_epoch)},
             },
         )
     except Exception as exc:
         logger.warning("memory.save_turns failed", extra={"structured": {"error": type(exc).__name__}})
+
+
+def save_mode(user_id: str, mode: str) -> None:
+    """UpdateItem — sets only mode/updated_at/ttl_epoch, leaves turns untouched. Silent on failure."""
+    if not _is_enabled() or not _table_name():
+        return
+    try:
+        now = datetime.now(tz=timezone.utc)
+        ttl_epoch = int((now + timedelta(days=TTL_DAYS)).timestamp())
+        _DDB_CLIENT.update_item(
+            TableName=_table_name(),
+            Key={"user_id": {"S": user_id}},
+            UpdateExpression="SET #m = :mode, updated_at = :ts, ttl_epoch = :ttl",
+            ExpressionAttributeNames={"#m": "mode"},
+            ExpressionAttributeValues={
+                ":mode": {"S": mode},
+                ":ts": {"S": now.isoformat()},
+                ":ttl": {"N": str(ttl_epoch)},
+            },
+        )
+    except Exception as exc:
+        logger.warning("memory.save_mode failed", extra={"structured": {"error": type(exc).__name__}})
 
 
 def build_cross_session_input(turns: list[dict]) -> list[dict[str, Any]]:

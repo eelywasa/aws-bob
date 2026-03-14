@@ -64,9 +64,9 @@ npx serverless deploy
 
 ## Development workflow
 
-Improvements and new features are tracked in `BACKLOG.md`. The standard workflow for picking up a backlog item is:
+Improvements and new features are tracked in `docs/backlog.md`. The standard workflow for picking up a backlog item is:
 
-1. **Read** `BACKLOG.md` and identify the next item to work on
+1. **Read** `docs/backlog.md` and identify the next item to work on
 2. **Plan** — enter plan mode and produce a detailed implementation plan covering architecture, files to change, and test strategy; review with the user before proceeding
 3. **Implement** — make the code changes per the agreed plan
 4. **Test** — run `pytest tests/ -v` and confirm all tests pass

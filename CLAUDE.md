@@ -62,6 +62,19 @@ npx serverless deploy
 | `src/util.py` | Structured logging (no transcript leakage), env helpers |
 | `skill-package/interactionModels/custom/en-GB.json` | Alexa interaction model — intents, slots, dialog config |
 
+## Development workflow
+
+Improvements and new features are tracked in `BACKLOG.md`. The standard workflow for picking up a backlog item is:
+
+1. **Read** `BACKLOG.md` and identify the next item to work on
+2. **Plan** — enter plan mode and produce a detailed implementation plan covering architecture, files to change, and test strategy; review with the user before proceeding
+3. **Implement** — make the code changes per the agreed plan
+4. **Test** — run `pytest tests/ -v` and confirm all tests pass
+5. **Deploy** — `npx serverless deploy`; push updated interaction model if intents changed; run smoke tests
+6. **Commit and push** — commit all changes with a descriptive message and push to `origin/main`
+
+When a backlog item is fully complete, note it as done in `BACKLOG.md` before moving on.
+
 ## Post-deploy configuration
 
 After first deploy, set the OpenAI API key:

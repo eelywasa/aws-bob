@@ -170,6 +170,39 @@ Acceptance Criteria:
 
 ---
 
+## 3.4 Voice-Safe Web Content Handling
+
+User Story:
+As a user, when Brainy Bob reads from web content, the spoken answer should be easy to listen to and not contain awkward tokens, URLs, markup, or formatting that sounds unnatural out loud.
+
+Tasks:
+- Shift primary control from post-processing cleanup toward prompt-level response shaping
+- Add explicit prompt instructions for voice-safe rendering of web-derived content
+- Instruct the model to avoid or transform:
+  - raw URLs
+  - markdown symbols
+  - long quoted passages
+  - citation clutter
+  - code fragments
+  - tables
+  - odd punctuation sequences
+  - unreadable token strings
+- Define voice rendering rules for web answers, for example:
+  - summarise rather than quote
+  - convert structured content into short spoken prose
+  - spell out only when necessary
+  - mention sources naturally rather than reading links
+- Retain lightweight `safety.py` cleanup as a defensive fallback rather than the primary mechanism
+- Add regression tests using representative messy web inputs
+
+Acceptance Criteria:
+- Web-derived answers sound natural when spoken aloud
+- Raw markup, URLs, and unwieldy tokens are rarely present in Alexa responses
+- Prompt instructions, not only output cleansing, are responsible for most formatting control
+- `safety.py` remains as a secondary guardrail rather than the main strategy
+
+---
+
 # Phase 4 — Memory Improvements
 Goal: Move from raw conversation history to useful long-term memory.
 

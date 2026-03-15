@@ -58,7 +58,7 @@ Acceptance Criteria:
 
 ---
 
-## 1.4 Fail-Fast Timeout Strategy
+## 1.4 Fail-Fast Timeout Strategy ✅ DONE
 User Story:
 As a user, if something goes wrong, Alexa should quickly apologise rather than waiting silently.
 

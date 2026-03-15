@@ -6,7 +6,8 @@ from typing import Any
 
 from ask_sdk_core.dispatch_components import AbstractRequestHandler
 from ask_sdk_core.handler_input import HandlerInput
-from ask_sdk_core.skill_builder import SkillBuilder
+from ask_sdk_core.api_client import DefaultApiClient
+from ask_sdk_core.skill_builder import CustomSkillBuilder, SkillBuilder
 from ask_sdk_model import Intent, Response
 from ask_sdk_model.dialog import ElicitSlotDirective
 from ask_sdk_model.slot import Slot
@@ -611,6 +612,6 @@ def _register_handlers(sb: SkillBuilder) -> SkillBuilder:
     return sb
 
 
-sb = SkillBuilder()
+sb = CustomSkillBuilder(api_client=DefaultApiClient())
 _register_handlers(sb)
 lambda_handler = sb.lambda_handler()

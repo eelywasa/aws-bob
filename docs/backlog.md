@@ -170,7 +170,7 @@ Acceptance Criteria:
 
 ---
 
-## 3.4 Voice-Safe Web Content Handling
+## 3.4 Voice-Safe Web Content Handling ✅ DONE
 
 User Story:
 As a user, when Brainy Bob reads from web content, the spoken answer should be easy to listen to and not contain awkward tokens, URLs, markup, or formatting that sounds unnatural out loud.

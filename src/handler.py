@@ -200,8 +200,8 @@ def handle_user_utterance(
         input_items.append({"role": "assistant", "content": turn.get("assistant", "")})
     input_items.append({"role": "user", "content": user_text})
 
-    instructions = build_system_prompt(mode)
     use_web_search = os.environ.get("ENABLE_WEB_SEARCH", "false").lower() == "true"
+    instructions = build_system_prompt(mode, web_search=use_web_search)
     progressive_enabled = os.environ.get("ENABLE_PROGRESSIVE_RESPONSE", "true").lower() == "true"
 
     if progressive_enabled:

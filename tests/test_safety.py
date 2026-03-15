@@ -96,6 +96,13 @@ def test_sanitize_collapses_newlines_to_spaces():
     assert "Line one." in result
     assert "Line two." in result
 
+def test_sanitize_strips_markdown_table_rows():
+    raw = "Results:\n| Team | Score |\n|---|---|\n| Arsenal | 2 |\n| Everton | 0 |"
+    result = sanitize_output(raw)
+    assert "|" not in result
+    assert "Results" in result
+
+
 def test_sanitize_real_web_search_response():
     """Simulate the shape of a real OpenAI web search response."""
     raw = (

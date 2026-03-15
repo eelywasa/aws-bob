@@ -43,10 +43,13 @@ def sanitize_output(text: str) -> str:
     text = re.sub(r'^[\-\*]\s+', '', text, flags=re.MULTILINE)
     text = re.sub(r'^\d+\.\s+', '', text, flags=re.MULTILINE)
 
-    # 6. Remaining bare URLs
+    # 6. Markdown table rows: lines with pipe-delimited cells
+    text = re.sub(r'^\|.*\|$', '', text, flags=re.MULTILINE)
+
+    # 7. Remaining bare URLs
     text = re.sub(r'https?://\S+', '', text, flags=re.IGNORECASE)
 
-    # 7. Collapse multiple newlines to a space, then normalise whitespace
+    # 8. Collapse multiple newlines to a space, then normalise whitespace
     text = re.sub(r'\n+', ' ', text)
     text = re.sub(r' {2,}', ' ', text)
 

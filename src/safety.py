@@ -5,9 +5,6 @@ import re
 
 from .util import logger
 
-# Matches http/https URLs including any trailing punctuation
-_URL_RE = re.compile(r'https?://\S+', re.IGNORECASE)
-
 
 def check_input(utterance: str) -> tuple[bool, str | None]:
     """
@@ -22,12 +19,35 @@ def check_input(utterance: str) -> tuple[bool, str | None]:
 
 def sanitize_output(text: str) -> str:
     """
-    Post-processing for voice output: strip URLs and normalise whitespace.
-    URLs are meaningless when spoken aloud and can be very long.
+    Post-processing for voice output: strip markdown formatting and URLs.
+    Web search responses from OpenAI include headers, bullets, and source
+    citations that are meaningless or disruptive when spoken aloud.
     """
     if not text:
         return ""
-    text = _URL_RE.sub("", text)
-    # Collapse any double spaces left behind after URL removal
+
+    # 1. Inline source citations: ([source](url)) or unclosed ([source]( — remove entirely
+    text = re.sub(r'\(\[[^\]]*\]\([^\)]*\)\)?', '', text)
+
+    # 2. Markdown links: [display text](url) → display text
+    text = re.sub(r'\[([^\]]*)\]\([^\)]*\)', r'\1', text)
+
+    # 3. Bold and italic markers: **text** / *text* / _text_ → text
+    text = re.sub(r'\*{1,2}([^\*\n]+)\*{1,2}', r'\1', text)
+    text = re.sub(r'_([^_\n]+)_', r'\1', text)
+
+    # 4. Markdown headers: ## Heading — strip the whole line
+    text = re.sub(r'^#{1,6}\s+.*$', '', text, flags=re.MULTILINE)
+
+    # 5. List markers at line start: strip - / * / 1. but keep the content
+    text = re.sub(r'^[\-\*]\s+', '', text, flags=re.MULTILINE)
+    text = re.sub(r'^\d+\.\s+', '', text, flags=re.MULTILINE)
+
+    # 6. Remaining bare URLs
+    text = re.sub(r'https?://\S+', '', text, flags=re.IGNORECASE)
+
+    # 7. Collapse multiple newlines to a space, then normalise whitespace
+    text = re.sub(r'\n+', ' ', text)
     text = re.sub(r' {2,}', ' ', text)
+
     return text.strip()

@@ -13,6 +13,7 @@ from ask_sdk_model.dialog import ElicitSlotDirective
 from ask_sdk_model.slot import Slot
 from ask_sdk_model.ui import SimpleCard
 
+import httpx
 import os
 import random
 import time
@@ -29,6 +30,12 @@ from .util import log_intent, logger
 FALLBACK_MSG = (
     "Sorry, I couldn't get an answer right now. "
     "Try again in a moment, or ask me something else."
+)
+
+# Fallback when AI is too slow (distinct from hard failure)
+TIMEOUT_MSG = (
+    "That's taking a bit long today. "
+    "Try asking again in a moment."
 )
 
 MAX_TURNS = 4
@@ -215,6 +222,12 @@ def handle_user_utterance(
             use_web_search=use_web_search,
         )
         ai_succeeded = True
+    except httpx.TimeoutException:
+        logger.warning(
+            "OpenAI request timed out",
+            extra={"structured": {"error_type": "TimeoutException"}},
+        )
+        text = TIMEOUT_MSG
     except Exception as e:
         logger.exception(
             "OpenAI request failed",

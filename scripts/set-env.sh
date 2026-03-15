@@ -16,8 +16,8 @@ if [[ $# -eq 0 ]]; then
   echo "  ENABLE_MEMORY               true|false"
   echo "  OPENAI_MODEL                e.g. gpt-4o-mini"
   echo "  MAX_OUTPUT_TOKENS           e.g. 280"
-  echo "  OPENAI_REQUEST_TIMEOUT      seconds, e.g. 10"
-  echo "  OPENAI_SEARCH_TIMEOUT       seconds, e.g. 7"
+  echo "  OPENAI_REQUEST_TIMEOUT      seconds, e.g. 6"
+  echo "  OPENAI_SEARCH_TIMEOUT       seconds, e.g. 6"
   echo "  PROGRESSIVE_MIN_WORDS       e.g. 8"
   exit 1
 fi

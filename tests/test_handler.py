@@ -241,6 +241,24 @@ class TestChatIntent:
         speech = _ssml_text(response)
         assert "sorry" in speech.lower() or "couldn't" in speech.lower()
 
+    def test_timeout_returns_timeout_message(self):
+        from httpx import TimeoutException
+        event = _intent_event("ChatIntent", slots={"utterance": "what is gravity"})
+        with patch("src.handler.get_completion", side_effect=TimeoutException("")):
+            response = lambda_handler(event, {})
+        speech = _ssml_text(response)
+        assert "taking" in speech.lower() or "long" in speech.lower()
+
+    def test_timeout_message_differs_from_fallback(self):
+        from httpx import TimeoutException
+        event_timeout = _intent_event("ChatIntent", slots={"utterance": "what is gravity"})
+        event_failure = _intent_event("ChatIntent", slots={"utterance": "what is gravity"})
+        with patch("src.handler.get_completion", side_effect=TimeoutException("")):
+            timeout_speech = _ssml_text(lambda_handler(event_timeout, {}))
+        with patch("src.handler.get_completion", side_effect=RuntimeError("down")):
+            failure_speech = _ssml_text(lambda_handler(event_failure, {}))
+        assert timeout_speech != failure_speech
+
 
 # ---------------------------------------------------------------------------
 # AskAIIntent (one-shot)

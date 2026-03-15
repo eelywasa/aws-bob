@@ -57,7 +57,7 @@
           ]
         },
         { "name": "AMAZON.HelpIntent", "samples": [] },
-        { "name": "AMAZON.StopIntent", "samples": [] },
+        { "name": "AMAZON.StopIntent", "samples": ["goodbye", "bye", "that's all", "go home"] },
         { "name": "AMAZON.CancelIntent", "samples": [] },
         { "name": "AMAZON.FallbackIntent", "samples": [] }
       ],
